@@ -1,0 +1,28 @@
+{
+  "name": "civictrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CivicTrack — Smart Civic Complaint Management System",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=@civictrack/server",
+    "dev:web": "npm run dev --workspace=@civictrack/web",
+    "dev": "npm run dev --workspace=@civictrack/server",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "keywords": [
+    "civic-tech",
+    "complaint-management",
+    "nextjs",
+    "express",
+    "mongodb"
+  ],
+  "author": "CivicTrack Team",
+  "license": "ISC"
+}

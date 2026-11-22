@@ -1,0 +1,51 @@
+{
+  "name": "@civictrack/server",
+  "version": "1.0.0",
+  "description": "CivicTrack Express Backend API",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "test": "tsx tests/server.test.ts && tsx tests/auth.test.ts && tsx tests/complaints.test.ts && tsx tests/storage.test.ts && tsx tests/maps.test.ts && tsx tests/notifications.test.ts && tsx tests/analytics-sla.test.ts && tsx tests/security-hardening.test.ts",
+    "test:auth": "tsx tests/auth.test.ts",
+    "test:complaints": "tsx tests/complaints.test.ts",
+    "test:storage": "tsx tests/storage.test.ts",
+    "test:maps": "tsx tests/maps.test.ts",
+    "test:notifications": "tsx tests/notifications.test.ts",
+    "test:analytics-sla": "tsx tests/analytics-sla.test.ts",
+    "test:security": "tsx tests/security-hardening.test.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/lib-storage": "^3.1175.0",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0",
+    "@civictrack/contracts": "*",
+    "@clerk/express": "^2.1.96",
+    "@types/multer": "^2.3.0",
+    "@types/swagger-ui-express": "^4.1.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.0.0",
+    "mongoose": "^8.10.1",
+    "multer": "^2.5.0",
+    "socket.io": "^4.8.4",
+    "svix": "^2.11.0",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.4",
+    "@types/supertest": "^7.2.1",
+    "rimraf": "^6.0.1",
+    "supertest": "^7.3.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
