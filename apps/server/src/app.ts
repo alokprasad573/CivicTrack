@@ -142,9 +142,6 @@ export function createApp(): Express {
   // Correlation ID tracking
   app.use(requestIdMiddleware);
 
-  // Clerk Session Middleware (extracts & cryptographically verifies session token)
-  app.use(clerkMiddleware());
-
   // Health / Liveness Check
   const healthHandler = (_req: Request, res: Response): void => {
     const response: ApiResponse<{
@@ -200,6 +197,11 @@ export function createApp(): Express {
 
   app.get("/ready", readyHandler);
   app.get("/api/v1/ready", readyHandler);
+
+  // Clerk is optional for staff-only deployments; health probes do not depend on it.
+  if (env.CLERK_PUBLISHABLE_KEY) {
+    app.use(clerkMiddleware());
+  }
 
   // API Documentation (Swagger UI & Raw OpenAPI Specification)
   app.use("/docs", docsRoutes);
