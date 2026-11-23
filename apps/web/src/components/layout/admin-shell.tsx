@@ -16,7 +16,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  CircleUser,
   SlidersHorizontal,
+  CircleCheck,
 } from "lucide-react";
 import { NotificationBell } from "../notifications/notification-bell";
 import { StaffAuthProvider, useStaffAuth } from "../../context/staff-auth-context";
@@ -32,7 +34,7 @@ const ADMIN_NAV: NavItem[] = [
   { id: "ADMIN_OVERVIEW", label: "Review & Assign", href: "/admin", icon: Inbox },
   { id: "ANALYTICS", label: "Target Times & Reports", href: "/admin/analytics", icon: BarChart3 },
   { id: "DEPARTMENTS", label: "Departments", href: "/admin/departments", icon: Building2 },
-  { id: "OFFICERS", label: "Field Staff Roster", href: "/admin/officers", icon: Users },
+  { id: "OFFICERS", label: "Officer Directory", href: "/admin/officers", icon: Users },
   { id: "CITY_MAP", label: "City Map", href: "/map", icon: MapPin },
 ];
 
@@ -40,7 +42,7 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useStaffAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); 
 
   return (
     <div className="min-h-screen flex bg-background text-foreground antialiased pb-16 lg:pb-0">
@@ -111,33 +113,22 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
           {!sidebarCollapsed ? (
             <div className="flex items-center justify-between p-2 rounded-xl bg-secondary/50">
               <div className="flex items-center gap-2.5 truncate">
-                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0">
-                  {user?.name ? user.name.charAt(0).toUpperCase() : "A"}
+                <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 shrink-0">
+                  <CircleUser className="w-5 h-5" />
                 </div>
                 <div className="truncate text-left text-xs">
                   <div className="font-semibold text-foreground truncate">{user?.name || "Administrator"}</div>
                   <div className="text-[10px] text-muted-foreground truncate">{user?.email || "Staff Admin"}</div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={logout}
-                title="Sign out of Admin Portal"
-                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition shrink-0"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={logout}
-                title="Sign out"
-                className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+            <div className="flex items-center justify-between p-2 rounded-xl bg-secondary/50">
+              <div className="flex items-center gap-2.5 truncate">
+                <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 shrink-0">
+                  <CircleUser className="w-5 h-5" />
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -171,11 +162,10 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-3">
             <NotificationBell role="admin" />
-
             <div className="hidden sm:flex items-center gap-2.5 pl-2.5 border-l border-border">
               <div className="text-right text-xs">
                 <div className="font-semibold text-foreground truncate max-w-[130px]">
-                  {user?.name || "Administrator"}
+                  Sign Out
                 </div>
                 <div className="text-[10px] font-semibold text-primary">
                   ADMIN

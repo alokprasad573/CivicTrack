@@ -44,3 +44,14 @@ export const PaginationQuerySchema = z.object({
 });
 
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
+
+export interface IDepartmentDto {
+  _id: string;
+  name: string;
+  code: string;
+  categories: string[];
+  createdByAdminId?: string;
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}

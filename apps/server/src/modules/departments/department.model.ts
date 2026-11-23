@@ -6,6 +6,7 @@ export interface IDepartmentDocument extends Document {
   name: string;
   code: string;
   categories: ComplaintCategory[];
+  createdByAdminId?: Types.ObjectId;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +35,11 @@ const DepartmentSchema = new Schema<IDepartmentDocument>(
         required: true,
       },
     ],
+    createdByAdminId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -45,6 +51,8 @@ const DepartmentSchema = new Schema<IDepartmentDocument>(
     versionKey: false,
   }
 );
+
+DepartmentSchema.index({ createdByAdminId: 1, isActive: 1 });
 
 export const DepartmentModel: Model<IDepartmentDocument> =
   mongoose.models.Department || mongoose.model<IDepartmentDocument>("Department", DepartmentSchema);

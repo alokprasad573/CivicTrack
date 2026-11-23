@@ -21,6 +21,27 @@ export const PasswordSchema = z
   );
 
 /**
+ * Direct Admin Registration Schema
+ */
+export const AdminRegisterSchema = z
+  .object({
+    name: z
+      .string({ required_error: "Name is required" })
+      .trim()
+      .min(1, "Name is required")
+      .max(120, "Name cannot exceed 120 characters"),
+    email: z.string().trim().email("Please provide a valid work email address").toLowerCase(),
+    password: PasswordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type AdminRegisterDto = z.infer<typeof AdminRegisterSchema>;
+
+/**
  * Admin Officer/Staff Invitation Creation Schema
  */
 export const CreateStaffInvitationSchema = z

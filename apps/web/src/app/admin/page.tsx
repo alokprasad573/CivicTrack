@@ -202,7 +202,9 @@ export default function AdminTriagePage() {
   useEffect(() => {
     async function loadDepartments() {
       try {
-        const res = await fetch("/api/v1/departments");
+        const res = await fetch("/api/v1/departments", {
+          credentials: "include",
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {
@@ -326,7 +328,9 @@ export default function AdminTriagePage() {
     async function loadOfficers() {
       setLoadingOfficers(true);
       try {
-        const res = await fetch(`/api/v1/departments/${selectedDeptId}/officers`);
+        const res = await fetch(`/api/v1/departments/${selectedDeptId}/officers`, {
+          credentials: "include",
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.success && json.data) {

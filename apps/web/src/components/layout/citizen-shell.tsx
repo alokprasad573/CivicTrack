@@ -110,7 +110,8 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
                 <UserButton
                   appearance={{
                     elements: {
-                      userButtonAvatarBox: "w-8 h-8 rounded-full border border-border",
+                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-border bg-blue-600 text-white [&_*]:text-white [&_svg]:fill-white",
+                      userButtonTrigger: "rounded-full bg-blue-600 text-white",
                     },
                   }}
                 />

@@ -13,6 +13,7 @@ erDiagram
     User ||--o{ StaffSession : "authenticates (staff)"
     User ||--o{ Notification : "receives"
     User ||--o{ UploadIntent : "creates"
+    User ||--o{ Department : "creates (admin)"
     Department ||--o{ User : "employs (officers)"
     Department ||--o{ Complaint : "routed to"
     Complaint ||--o{ ComplaintStatusHistory : "audit logs"
@@ -26,7 +27,7 @@ erDiagram
         string clerkUserId UK "Sparse index for citizen OAuth"
         string email UK "Indexed, unique, lowercase"
         string passwordHash "Omitted from default queries"
-        string name "Max 120 chars"
+        string name "Max 120 chars (real name required)"
         string role "CITIZEN | OFFICER | ADMIN"
         ObjectId departmentId FK "Nullable for citizens/superadmins"
         boolean isActive "Default true"
@@ -38,9 +39,8 @@ erDiagram
         ObjectId _id PK
         string name "Max 120 chars"
         string code UK "Uppercase, 2-20 chars"
-        string description "Max 500 chars"
         string[] categories "Handled complaint categories"
-        ObjectId headOfficerId FK "Nullable"
+        ObjectId createdByAdminId FK "Admin creator reference for isolation"
         boolean isActive "Default true"
         Date createdAt
         Date updatedAt
@@ -183,6 +183,7 @@ The core operational document representing a civic issue reported by a citizen.
 * **Indexes:**
   ```javascript
   // 1. Geospatial 2dsphere index for proximity lookup & duplicate detection
+  // Verified and automatically synchronized on database connect (and via `npm run sync:indexes`)
   { location: "2dsphere" }
 
   // 2. Citizen complaint history timeline (descending)
@@ -204,7 +205,9 @@ The core operational document representing a civic issue reported by a citizen.
 ---
 
 ### 2.2 `users` Collection
-Manages identities for both public citizens (authenticated via Clerk OAuth) and municipal municipal employees (officers, supervisors, admins).
+Manages identities for both public citizens (authenticated via Clerk OAuth) and municipal employees (officers, supervisors, admins).
+- **Administrator Real Name:** Requires real name validation (trimmed, non-empty, max 120 chars) upon `/admin/register`.
+- **Officer Safe Deletion:** Safely unlinks active complaint assignments, revokes staff sessions, and cancels pending invitations while preserving historical complaint records and audit history.
 
 * **Indexes:**
   ```javascript
@@ -220,7 +223,25 @@ Manages identities for both public citizens (authenticated via Clerk OAuth) and 
 
 ---
 
-### 2.3 `upload_intents` Collection
+### 2.3 `departments` Collection
+Manages municipal departments, category bindings, and creator-scoped access control.
+
+* **Creator Isolation:** Stores `createdByAdminId` (reference to `User`). Administrative queries, rosters, and metrics are strictly scoped to departments created by the authenticated administrator.
+* **Indexes:**
+  ```javascript
+  // Unique department code
+  { code: 1 }, { unique: true }
+
+  // Creator admin scoping & active filter
+  { createdByAdminId: 1, isActive: 1 }
+
+  // Active status index
+  { isActive: 1 }
+  ```
+
+---
+
+### 2.4 `upload_intents` Collection
 Enforces **Pre-Signed Upload Security**. No evidence photo can be attached to a complaint unless a pre-signed intent was generated, verified for MIME type and file size, and attached before expiration.
 
 * **TTL Expiration:** Automatically garbage-collected if unused within 2 hours.

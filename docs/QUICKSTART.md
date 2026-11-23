@@ -109,6 +109,12 @@ CivicTrack includes deterministic seed scripts to populate default municipal dep
 ```bash
 # Seed initial municipal departments and test staff
 npm run seed:staff --workspace=@civictrack/server
+
+# Explicitly build and synchronize database indexes (2dsphere geospatial & unique constraints)
+npm run sync:indexes --workspace=@civictrack/server
+
+# Backfill/migrate legacy unowned departments to a designated administrator
+npx tsx apps/server/src/scripts/backfill-department-creators.ts [adminEmailOrId]
 ```
 
 > 💡 **Tip:** To generate a new staff invitation token via CLI:
@@ -166,6 +172,11 @@ npm run lint
 
 # Run full backend test suite
 npm test --workspace=@civictrack/server
+
+# Run focused test suites:
+npm run test:admin-scoped-data --workspace=@civictrack/server # Creator-scoped multi-tenant admin isolation
+npm run test:officers --workspace=@civictrack/server          # Officer safe deletion & directory filtering
+npm run test:admin-register --workspace=@civictrack/server    # Admin registration name field verification
 ```
 
 ---

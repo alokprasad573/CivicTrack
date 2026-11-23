@@ -4,8 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ShieldCheck,
-  Shield,
+  Landmark,
   Lock,
   Mail,
   User,
@@ -175,8 +174,8 @@ export function StaffRegisterForm({ portalType }: StaffRegisterFormProps) {
         <div className="rounded-3xl border border-slate-200 bg-white p-8 sm:p-10 shadow-2xl shadow-blue-500/5 space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25">
-              {isOfficer ? <Shield className="w-7 h-7" /> : <ShieldCheck className="w-7 h-7" />}
+            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25">
+              <Landmark className="w-7 h-7" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">{portalTitle}</h1>
             <p className="text-xs text-slate-500">{portalDesc}</p>

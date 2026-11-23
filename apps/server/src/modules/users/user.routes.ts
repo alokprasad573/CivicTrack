@@ -88,6 +88,7 @@ router.get(
       const query = PaginationQuerySchema.parse(req.query);
       const roleFilter = req.query.role as UserRole | undefined;
       const search = req.query.search as string | undefined;
+      const departmentCode = req.query.departmentCode as string | undefined;
 
       // Scoping: Officers are strictly constrained to their own department
       let departmentId: string | undefined = req.query.departmentId as string | undefined;
@@ -107,6 +108,8 @@ router.get(
         role: roleFilter,
         search,
         departmentId,
+        departmentCode,
+        requestingAdminId: req.user!.role === UserRole.ADMIN ? req.user!.id : undefined,
       });
 
       const response: PaginatedResponse<IUserDocument> = {
@@ -149,6 +152,7 @@ router.patch(
         userId: req.params.id as string,
         role: dto.role,
         departmentId: dto.departmentId as string | undefined,
+        requestingAdminId: req.user!.id,
       });
 
       const response: ApiResponse<IUserDocument> = {
@@ -161,6 +165,49 @@ router.patch(
       next(error);
     }
   }
+);
+
+/**
+ * Handler for safe officer deletion by administrator
+ */
+const deleteOfficerHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await UserService.deleteOfficer({
+      officerId: req.params.id as string,
+      requestingAdminId: req.user!.id,
+    });
+
+    const response: ApiResponse<typeof result> = {
+      success: true,
+      data: result,
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/v1/users/officers/:id
+ * Admin endpoint to safely delete a field officer
+ */
+router.delete(
+  "/officers/:id",
+  authenticateUser,
+  requireRole(UserRole.ADMIN),
+  deleteOfficerHandler
+);
+
+/**
+ * DELETE /api/v1/users/:id
+ * Admin endpoint (REST alias) to safely delete a field officer
+ */
+router.delete(
+  "/:id",
+  authenticateUser,
+  requireRole(UserRole.ADMIN),
+  deleteOfficerHandler
 );
 
 export const userRoutes = router;

@@ -95,11 +95,19 @@ export class StaffAuthService {
    */
   public static async adminRegister(params: {
     email: string;
-    name?: string;
+    name: string;
     password: string;
     userAgent?: string;
     ipAddress?: string;
   }): Promise<StaffAuthResult> {
+    const trimmedName = typeof params.name === "string" ? params.name.trim() : "";
+    if (!trimmedName || trimmedName.length === 0) {
+      throw new ValidationError("Name is required");
+    }
+    if (trimmedName.length > 120) {
+      throw new ValidationError("Name cannot exceed 120 characters");
+    }
+
     const normalizedEmail = params.email.toLowerCase().trim();
     if (!normalizedEmail || !normalizedEmail.includes("@")) {
       throw new ValidationError("Please provide a valid work email address.");
@@ -117,11 +125,10 @@ export class StaffAuthService {
     }
 
     const passwordHash = await bcrypt.hash(params.password, 12);
-    const displayName = params.name?.trim() || normalizedEmail.split("@")[0] || "Administrator";
 
     let user: any;
     if (existingUser) {
-      existingUser.name = displayName;
+      existingUser.name = trimmedName;
       existingUser.passwordHash = passwordHash;
       existingUser.role = UserRole.ADMIN;
       existingUser.isActive = true;
@@ -130,7 +137,7 @@ export class StaffAuthService {
     } else {
       user = await UserModel.create({
         email: normalizedEmail,
-        name: displayName,
+        name: trimmedName,
         passwordHash,
         role: UserRole.ADMIN,
         isActive: true,
@@ -140,6 +147,7 @@ export class StaffAuthService {
     logger.info("Administrator account registered directly", {
       userId: user._id.toString(),
       email: normalizedEmail,
+      name: trimmedName,
     });
 
     return await this.createStaffSession({
@@ -245,6 +253,9 @@ export class StaffAuthService {
       const department = await DepartmentModel.findById(params.departmentId);
       if (!department || !department.isActive) {
         throw new ValidationError("Assigned department is invalid or inactive.");
+      }
+      if (!department.createdByAdminId || department.createdByAdminId.toString() !== params.invitedByUserId) {
+        throw new ForbiddenError("You can only assign officers to departments you created.");
       }
       deptObjectId = department._id;
     }

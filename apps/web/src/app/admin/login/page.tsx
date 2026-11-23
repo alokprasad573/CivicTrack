@@ -3,7 +3,7 @@
 import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Landmark, Lock, Mail, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff, Check } from "lucide-react";
+import { Landmark, Lock, Mail, User, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff, Check } from "lucide-react";
 
 export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {
   const router = useRouter();
@@ -11,6 +11,7 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
   const returnTo = searchParams.get("returnTo") || "/admin";
 
   const [mode, setMode] = useState<"login" | "register">(initialMode);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -35,6 +36,17 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
     setError(null);
 
     if (isRegister) {
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        setError("Name is required");
+        setIsLoading(false);
+        return;
+      }
+      if (trimmedName.length > 120) {
+        setError("Name cannot exceed 120 characters");
+        setIsLoading(false);
+        return;
+      }
       if (!hasLength) {
         setError("Password must be at least 8 characters long");
         setIsLoading(false);
@@ -54,7 +66,9 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
 
     try {
       const endpoint = isRegister ? "/api/v1/admin/auth/register" : "/api/v1/admin/auth/login";
-      const payload = isRegister ? { email, password, confirmPassword } : { email, password };
+      const payload = isRegister
+        ? { name: name.trim(), email: email.trim(), password, confirmPassword }
+        : { email: email.trim(), password };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -81,6 +95,7 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
 
   const toggleMode = () => {
     setError(null);
+    setName("");
     setMode(isRegister ? "login" : "register");
   };
 
@@ -131,9 +146,27 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegister && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Full Name *</label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={120}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Sarah Jenkins"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3.5 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700">
-                {isRegister ? "Work Email" : "Email"}
+                {isRegister ? "Work Email *" : "Email"}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

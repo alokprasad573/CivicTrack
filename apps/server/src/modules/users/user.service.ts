@@ -48,12 +48,27 @@ export class UserService {
       });
     }
 
-    const existing = await UserModel.findOne({ clerkUserId: dto.clerkUserId });
+    const existing = await UserModel.findOne({
+      $or: [{ clerkUserId: dto.clerkUserId }, { email }],
+    });
 
     if (existing) {
-      existing.email = email;
-      existing.name = dto.name;
-      await existing.save();
+      let modified = false;
+      if (!existing.clerkUserId || existing.clerkUserId !== dto.clerkUserId) {
+        existing.clerkUserId = dto.clerkUserId;
+        modified = true;
+      }
+      if (dto.name && existing.name !== dto.name) {
+        existing.name = dto.name;
+        modified = true;
+      }
+      if (existing.email !== email) {
+        existing.email = email;
+        modified = true;
+      }
+      if (modified) {
+        await existing.save();
+      }
       logger.info("Synchronized existing user from Clerk", {
         clerkUserId: dto.clerkUserId,
         role: existing.role,
@@ -62,20 +77,54 @@ export class UserService {
     }
 
     // New registration: Public registration is strictly CITIZEN role
-    const newUser = await UserModel.create({
-      clerkUserId: dto.clerkUserId,
-      email,
-      name: dto.name,
-      role: UserRole.CITIZEN,
-      isActive: true,
-    });
+    try {
+      const newUser = await UserModel.create({
+        clerkUserId: dto.clerkUserId,
+        email,
+        name: dto.name,
+        role: UserRole.CITIZEN,
+        isActive: true,
+      });
 
-    logger.info("Provisioned new local citizen from Clerk", {
-      userId: newUser._id.toString(),
-      clerkUserId: dto.clerkUserId,
-    });
+      logger.info("Provisioned new local citizen from Clerk", {
+        userId: newUser._id.toString(),
+        clerkUserId: dto.clerkUserId,
+      });
 
-    return newUser;
+      return newUser;
+    } catch (createErr: any) {
+      // Handle race condition: If a concurrent request created the user with the same clerkUserId or email
+      const isDuplicateKey =
+        createErr?.code === 11000 ||
+        createErr?.codeName === "DuplicateKey" ||
+        (typeof createErr?.message === "string" && createErr.message.includes("E11000"));
+
+      if (isDuplicateKey) {
+        logger.info("Concurrent Clerk sync detected on user creation, recovering existing user", {
+          clerkUserId: dto.clerkUserId,
+          email,
+        });
+        const concurrentUser = await UserModel.findOne({
+          $or: [{ clerkUserId: dto.clerkUserId }, { email }],
+        });
+        if (concurrentUser) {
+          let modified = false;
+          if (!concurrentUser.clerkUserId || concurrentUser.clerkUserId !== dto.clerkUserId) {
+            concurrentUser.clerkUserId = dto.clerkUserId;
+            modified = true;
+          }
+          if (dto.name && concurrentUser.name !== dto.name) {
+            concurrentUser.name = dto.name;
+            modified = true;
+          }
+          if (modified) {
+            await concurrentUser.save().catch(() => {});
+          }
+          return concurrentUser;
+        }
+      }
+      throw createErr;
+    }
   }
 
   /**
@@ -148,6 +197,8 @@ export class UserService {
     role?: UserRole;
     search?: string;
     departmentId?: string;
+    departmentCode?: string;
+    requestingAdminId?: string;
   }): Promise<{ users: IUserDocument[]; total: number; page: number; limit: number; totalPages: number }> {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
@@ -157,11 +208,81 @@ export class UserService {
     if (options.role) {
       query.role = options.role;
     }
-    if (options.departmentId) {
-      if (!Types.ObjectId.isValid(options.departmentId)) {
-        throw new ValidationError("Invalid department ID format");
+
+    // Scoping for Administrators: Only see officers/users in departments created by this admin
+    if (options.requestingAdminId) {
+      if (!Types.ObjectId.isValid(options.requestingAdminId)) {
+        throw new ValidationError("Invalid requesting admin ID format");
       }
-      query.departmentId = new Types.ObjectId(options.departmentId);
+      const adminDepts = await DepartmentModel.find({
+        createdByAdminId: new Types.ObjectId(options.requestingAdminId),
+        isActive: true,
+      }).select("_id code");
+
+      if (adminDepts.length === 0) {
+        // Admin has created no departments yet -> no officers exist for this admin
+        return {
+          users: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        };
+      }
+
+      const adminDeptIds = adminDepts.map((d) => d._id);
+
+      if (options.departmentCode) {
+        const matched = adminDepts.find(
+          (d) => d.code.toUpperCase() === options.departmentCode!.trim().toUpperCase()
+        );
+        if (!matched) {
+          // Filtered by department code not belonging to this admin
+          return {
+            users: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          };
+        }
+        query.departmentId = matched._id;
+      } else if (options.departmentId) {
+        if (!Types.ObjectId.isValid(options.departmentId)) {
+          throw new ValidationError("Invalid department ID format");
+        }
+        const requestedDeptId = new Types.ObjectId(options.departmentId);
+        if (!adminDeptIds.some((id) => id.equals(requestedDeptId))) {
+          throw new ForbiddenError("You do not have access to view users from this department.");
+        }
+        query.departmentId = requestedDeptId;
+      } else {
+        query.departmentId = { $in: adminDeptIds };
+      }
+    } else {
+      if (options.departmentCode) {
+        const dept = await DepartmentModel.findOne({
+          code: options.departmentCode.trim().toUpperCase(),
+          isActive: true,
+        });
+        if (dept) {
+          query.departmentId = dept._id;
+        } else {
+          // Non-existent department code returns empty result
+          return {
+            users: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          };
+        }
+      } else if (options.departmentId) {
+        if (!Types.ObjectId.isValid(options.departmentId)) {
+          throw new ValidationError("Invalid department ID format");
+        }
+        query.departmentId = new Types.ObjectId(options.departmentId);
+      }
     }
     if (options.search) {
       // Escape regex metacharacters to prevent ReDoS injection
@@ -191,6 +312,113 @@ export class UserService {
   }
 
   /**
+   * Safely delete a field officer.
+   * Strict validation:
+   *  - Target user must exist and have role === OFFICER.
+   *  - Citizens and Administrators cannot be deleted via this method.
+   *  - Self-deletion is prohibited.
+   * Consistent referential integrity:
+   *  - Staff sessions for this officer are revoked and deleted.
+   *  - WebSockets for this officer are instantly disconnected.
+   *  - Pending invitations for this officer's email are revoked.
+   *  - Complaints assigned to this officer have their assignedOfficerId cleared (preserved for department reassignment).
+   *  - Complaint status audit history and notifications remain preserved for municipal integrity.
+   */
+  public static async deleteOfficer(params: {
+    officerId: string;
+    requestingAdminId: string;
+  }): Promise<{ message: string; deletedOfficerId: string; affectedComplaintsCount: number }> {
+    const { officerId, requestingAdminId } = params;
+
+    if (!Types.ObjectId.isValid(officerId)) {
+      throw new ValidationError("Invalid officer ID format");
+    }
+
+    if (officerId === requestingAdminId) {
+      throw new ForbiddenError("Administrators cannot delete their own account.");
+    }
+
+    if (UserModel.db.readyState !== 1) {
+      throw new NotFoundError("Officer not found (database offline)");
+    }
+
+    const officer = await UserModel.findById(officerId);
+    if (!officer) {
+      throw new NotFoundError("Officer not found");
+    }
+
+    // Role validation: ONLY OFFICER role can be deleted by this method
+    if (officer.role !== UserRole.OFFICER) {
+      throw new ForbiddenError(
+        `Only accounts with the OFFICER role can be deleted. Target account has role '${officer.role}'.`
+      );
+    }
+
+    // Department ownership validation: Admin can only delete officers assigned to departments they created
+    if (officer.departmentId) {
+      const dept = await DepartmentModel.findById(officer.departmentId);
+      if (!dept || !dept.createdByAdminId || dept.createdByAdminId.toString() !== requestingAdminId) {
+        throw new ForbiddenError("You can only delete officers assigned to departments you created.");
+      }
+    } else {
+      throw new ForbiddenError("Officer is not assigned to any of your departments.");
+    }
+
+    const officerObjectId = new Types.ObjectId(officerId);
+
+    // 1. Unassign officer from active complaints (preserve complaint record and audit trail, but clear assignment)
+    const { ComplaintModel } = await import("../complaints/complaint.model.js");
+    let affectedComplaintsCount = 0;
+    if (ComplaintModel.db.readyState === 1) {
+      const updateResult = await ComplaintModel.updateMany(
+        { assignedOfficerId: officerObjectId },
+        { $unset: { assignedOfficerId: 1 } }
+      );
+      affectedComplaintsCount = updateResult.modifiedCount;
+    }
+
+    // 2. Revoke and delete staff sessions
+    if (StaffSessionModel.db.readyState === 1) {
+      await StaffSessionModel.deleteMany({ userId: officerObjectId });
+    }
+
+    // 3. Disconnect open sockets immediately
+    disconnectUserSockets(officerId);
+
+    // 4. Revoke any pending invitations associated with this email
+    const { StaffInvitationModel } = await import("../staff-auth/staff-invitation.model.js");
+    if (StaffInvitationModel.db.readyState === 1) {
+      await StaffInvitationModel.updateMany(
+        { email: officer.email, status: "PENDING" },
+        {
+          $set: {
+            status: "REVOKED",
+            revokedAt: new Date(),
+            revokedBy: new Types.ObjectId(requestingAdminId),
+          },
+        }
+      );
+    }
+
+    // 5. Delete the officer record
+    await UserModel.deleteOne({ _id: officerObjectId });
+
+    logger.info("Field officer safely deleted by administrator", {
+      deletedOfficerId: officerId,
+      officerEmail: officer.email,
+      departmentId: officer.departmentId?.toString(),
+      adminId: requestingAdminId,
+      affectedComplaintsCount,
+    });
+
+    return {
+      message: "Officer account successfully removed and related active assignments unlinked.",
+      deletedOfficerId: officerId,
+      affectedComplaintsCount,
+    };
+  }
+
+  /**
    * Admin updates user role and optionally binds to a municipal department.
    * Enforces role integrity, last-admin protection, and instant session revocation.
    */
@@ -198,6 +426,7 @@ export class UserService {
     userId: string;
     role: UserRole;
     departmentId?: string;
+    requestingAdminId?: string;
   }): Promise<IUserDocument> {
     if (UserModel.db.readyState !== 1) {
       throw new NotFoundError("User not found (database offline)");
@@ -227,6 +456,11 @@ export class UserService {
       const dept = await DepartmentModel.findById(params.departmentId);
       if (!dept || !dept.isActive) {
         throw new ValidationError("Selected department does not exist or is inactive.");
+      }
+      if (params.requestingAdminId) {
+        if (!dept.createdByAdminId || dept.createdByAdminId.toString() !== params.requestingAdminId) {
+          throw new ForbiddenError("You can only assign officers to departments you created.");
+        }
       }
       user.departmentId = dept._id;
     } else {

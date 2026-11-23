@@ -9,6 +9,7 @@ import { DepartmentModel } from "../src/modules/departments/department.model.js"
 import {
   UserRole,
   ComplaintCategory,
+  AdminRegisterSchema,
   CreateStaffInvitationSchema,
   AcceptStaffInvitationSchema,
 } from "@civictrack/contracts";
@@ -125,6 +126,87 @@ async function runStaffAuthTests(): Promise<void> {
   if (emptyVerifyRes.status !== 400) {
     throw new Error(`Failed: Empty GET /api/v1/staff/invitations/verify must return 400, got ${emptyVerifyRes.status}`);
   }
+
+  // 0e. AdminRegisterSchema validation & direct admin registration endpoint validation
+  console.log("0e. Testing AdminRegisterSchema & Direct Registration Name Validation:");
+  const validAdminReg = AdminRegisterSchema.safeParse({
+    name: "Sarah Jenkins",
+    email: "sarah.admin@civictrack.org",
+    password: "Password@123",
+    confirmPassword: "Password@123",
+  });
+  if (!validAdminReg.success) {
+    throw new Error("Failed: AdminRegisterSchema rejected valid registration payload");
+  }
+
+  const emptyNameReg = AdminRegisterSchema.safeParse({
+    name: "",
+    email: "sarah.admin@civictrack.org",
+    password: "Password@123",
+    confirmPassword: "Password@123",
+  });
+  if (emptyNameReg.success) {
+    throw new Error("Failed: AdminRegisterSchema must reject empty name");
+  }
+
+  const whitespaceNameReg = AdminRegisterSchema.safeParse({
+    name: "    ",
+    email: "sarah.admin@civictrack.org",
+    password: "Password@123",
+    confirmPassword: "Password@123",
+  });
+  if (whitespaceNameReg.success) {
+    throw new Error("Failed: AdminRegisterSchema must reject whitespace-only name");
+  }
+
+  const longNameReg = AdminRegisterSchema.safeParse({
+    name: "a".repeat(121),
+    email: "sarah.admin@civictrack.org",
+    password: "Password@123",
+    confirmPassword: "Password@123",
+  });
+  if (longNameReg.success) {
+    throw new Error("Failed: AdminRegisterSchema must reject name exceeding 120 characters");
+  }
+
+  // HTTP endpoint rejects missing name
+  const missingNameRes = await request(app)
+    .post("/api/v1/admin/auth/register")
+    .send({
+      email: "missing.name@civictrack.org",
+      password: "Password@123",
+      confirmPassword: "Password@123",
+    });
+  if (missingNameRes.status !== 400) {
+    throw new Error(`Failed: POST /api/v1/admin/auth/register without name must return 400, got ${missingNameRes.status}`);
+  }
+
+  // HTTP endpoint rejects blank name
+  const blankNameRes = await request(app)
+    .post("/api/v1/admin/auth/register")
+    .send({
+      name: "   ",
+      email: "blank.name@civictrack.org",
+      password: "Password@123",
+      confirmPassword: "Password@123",
+    });
+  if (blankNameRes.status !== 400) {
+    throw new Error(`Failed: POST /api/v1/admin/auth/register with blank name must return 400, got ${blankNameRes.status}`);
+  }
+
+  // HTTP endpoint rejects name exceeding 120 characters
+  const tooLongNameRes = await request(app)
+    .post("/api/v1/admin/auth/register")
+    .send({
+      name: "a".repeat(121),
+      email: "toolong.name@civictrack.org",
+      password: "Password@123",
+      confirmPassword: "Password@123",
+    });
+  if (tooLongNameRes.status !== 400) {
+    throw new Error(`Failed: POST /api/v1/admin/auth/register with 121-char name must return 400, got ${tooLongNameRes.status}`);
+  }
+  console.log("   -> Direct admin registration name validation rules strictly enforced\n");
   console.log("   -> Unauthenticated / invalid payload protections verified\n");
 
   const connected = await connectDatabase();
@@ -517,6 +599,37 @@ async function runStaffAuthTests(): Promise<void> {
       throw new Error("Failed: Accepting revoked invitation must NOT succeed with 201");
     }
     console.log("   -> Revocation verified and revoked token acceptance rejected\n");
+
+    // TEST 19: Direct Administrator Registration stores real name in MongoDB
+    console.log("19. Testing Direct Administrator Registration with Real Name:");
+    const testAdminEmail = `elena.admin.${Date.now()}@civictrack.org`;
+    const testAdminRealName = "Elena Rostova";
+
+    const directRegRes = await request(app)
+      .post("/api/v1/admin/auth/register")
+      .send({
+        name: testAdminRealName,
+        email: testAdminEmail,
+        password: "StrongAdmin@123",
+        confirmPassword: "StrongAdmin@123",
+      });
+
+    if (directRegRes.status !== 201 || !directRegRes.body.data?.user) {
+      throw new Error(`Failed: Admin direct registration must return 201, got ${directRegRes.status}`);
+    }
+
+    if (directRegRes.body.data.user.name !== testAdminRealName) {
+      throw new Error(`Failed: Response user name must be '${testAdminRealName}', got '${directRegRes.body.data.user.name}'`);
+    }
+
+    const savedAdminInDb = await UserModel.findOne({ email: testAdminEmail });
+    if (!savedAdminInDb || savedAdminInDb.name !== testAdminRealName) {
+      throw new Error(`Failed: MongoDB User document must store '${testAdminRealName}', got '${savedAdminInDb?.name}'`);
+    }
+    console.log("   -> Real name successfully saved to MongoDB admin User document without default fallback\n");
+
+    await UserModel.deleteOne({ _id: savedAdminInDb._id });
+    await StaffSessionModel.deleteMany({ userId: savedAdminInDb._id });
 
     // Clean up test data
     await UserModel.deleteMany({

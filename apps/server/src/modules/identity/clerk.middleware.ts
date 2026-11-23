@@ -51,6 +51,11 @@ export async function authenticateUser(
           const user = await UserModel.findById(claims.sub);
 
           if (!user) {
+            logger.warn("User account not found during staff authentication", {
+              sub: claims.sub,
+              claimsEmail: claims.email,
+              claimsRole: claims.role,
+            });
             throw new UnauthorizedError("User account not found.");
           }
 
@@ -126,6 +131,11 @@ export async function authenticateUser(
           error: clerkErr instanceof Error ? clerkErr.message : String(clerkErr),
         });
       }
+
+      // Concurrency fallback: In case another concurrent request or socket handshake provisioned the user
+      if (!user) {
+        user = await UserService.findByClerkUserId(auth.userId);
+      }
     }
 
     if (!user) {
@@ -151,5 +161,24 @@ export async function authenticateUser(
     next();
   } catch (error) {
     next(error);
+  }
+}
+
+/**
+ * Optional CivicTrack Authentication Resolver
+ * Populates req.user if a valid token is present; otherwise proceeds unauthenticated.
+ */
+export async function optionalAuthenticateUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await authenticateUser(req, res, () => {
+      next();
+    });
+  } catch {
+    // Silently continue without authenticated user context
+    next();
   }
 }

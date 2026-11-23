@@ -56,14 +56,17 @@ CivicTrack bridges the communication gap between citizens and municipal authorit
 * **Department Performance Breakdown:** Tracks complaint volume, resolution rate, and overdue tickets across all municipal departments.
 * **Category & Severity Breakdown:** Donut and distribution matrices showing top reported civic issues.
 
-### 🏢 3.2 Department & Category Routing
-* Create and manage municipal departments (e.g., Roads & Infrastructure, Water & Sewage, Electrical, Public Health).
+### 🏢 3.2 Department & Creator-Scoped Access Control
+* **Creator-Based Admin Isolation:** Each administrator only accesses, monitors, and manages departments they personally registered (`createdByAdminId`).
+* **Cross-Tenant Protection:** Cross-admin inspection, updates, or deletions are strictly rejected with HTTP 403 Forbidden.
+* **Auto-Scoped Analytics:** Operational KPI metrics and daily trends strictly isolate complaints and officers to departments belonging to the logged-in administrator.
 * Map departments to specific civic categories with automatic routing rules.
-* View and manage roster of field officers assigned to each department.
 
-### 👮 3.3 Staff Governance & Invitations
+### 👮 3.3 Staff Governance, Directory & Safe Deletion
+* **Role & Department Code Filtering:** Dedicated officer directory strictly filtering `role === OFFICER` and filtering by municipal `departmentCode`.
+* **Safe Officer Deletion:** Administrators can safely delete field officers within their departments. Automatically unlinks active complaints (preserving complaint history and audit logs for municipal transparency), revokes staff sessions, disconnects open WebSockets, and revokes pending invites.
 * **Cryptographic Invitations:** Admins generate secure invitation tokens with assigned departments and roles.
-* **Direct Staff Management:** Activate/deactivate officer accounts, update role permissions, and reassign departmental jurisdictions.
+* **Admin Real Name Registration:** Direct admin self-registration (`/admin/register`) requiring verified real names, eliminating generic placeholders.
 
 ### ⏱️ 3.4 SLA Monitoring & Auto-Escalation Engine
 * Automated background workers periodically evaluate open complaints against severity-based SLA deadlines.
@@ -77,6 +80,6 @@ CivicTrack bridges the communication gap between citizens and municipal authorit
 * **Monorepo Architecture:** npm workspaces with shared contracts package (`@civictrack/contracts`).
 * **Dual Authentication:** Clerk OAuth2 for public citizens + Secure Custom JWT with HttpOnly cookies for municipal staff.
 * **Socket.IO Real-time Engine:** Room taxonomy (`user:*`, `role:*`, `department:*`, `complaint:*`) with deduplication and reconnect reconciliation.
-* **Geospatial 2dsphere Indexing:** Sub-millisecond geographic proximity queries and duplicate suppression within a 50m radius.
+* **Geospatial 2dsphere Indexing:** Sub-millisecond geographic proximity queries, nearby issue discovery, and duplicate suppression within a 50m radius. Automatically synchronized and verified across database connections.
 * **Cloud-Native Storage:** Direct S3 pre-signed upload flow with temporary access keys.
 * **Automated CI/CD:** GitHub Actions test, lint, typecheck gates, and multi-stage Docker container publishing to GHCR.

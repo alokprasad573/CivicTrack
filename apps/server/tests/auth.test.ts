@@ -1,9 +1,18 @@
 import request from "supertest";
 import { Webhook } from "svix";
-import { app } from "../src/app.js";
-import { env } from "../src/config/env.js";
+
+// Svix requires a `whsec_` secret whose suffix is valid Base64. Set it before
+// importing the app so the webhook controller reads the same test secret.
+const TEST_WEBHOOK_SECRET =
+  "whsec_dGVzdF9jaXZpY3RyYWNrX3dlYmhvb2tfc2VjcmV0XzMyYnl0ZXMhIQ==";
+process.env.CLERK_WEBHOOK_SIGNING_SECRET = TEST_WEBHOOK_SECRET;
 
 async function runAuthTests(): Promise<void> {
+  const [{ app }, { env }] = await Promise.all([
+    import("../src/app.js"),
+    import("../src/config/env.js"),
+  ]);
+
   console.log("Running Phase 3 Clerk Authentication & Webhook Verification Tests...\n");
 
   // 1. Unauthenticated request to /api/v1/users/me must return 401
@@ -54,7 +63,7 @@ async function runAuthTests(): Promise<void> {
   console.log("   -> Correctly rejected forged signature\n");
 
   // 5. Webhook request with valid Svix signature
-  const signingSecret = env.CLERK_WEBHOOK_SIGNING_SECRET || "whsec_test_secret_for_local_testing_12345";
+  const signingSecret = env.CLERK_WEBHOOK_SIGNING_SECRET!;
   const timestamp = Math.floor(Date.now() / 1000);
   const msgId = `msg_${Date.now()}`;
   const payload = JSON.stringify({

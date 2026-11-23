@@ -14,11 +14,16 @@ export class AnalyticsService {
   /**
    * Get server-side aggregated municipal operational analytics
    */
-  public static async getSummary(filter: AnalyticsFilterDto): Promise<IAnalyticsSummary> {
+  public static async getSummary(filter: AnalyticsFilterDto, adminDepartmentIds?: string[]): Promise<IAnalyticsSummary> {
     if (ComplaintModel.db.readyState !== 1) {
       if (process.env.NODE_ENV === "production") {
         throw new ServiceUnavailableError("Database is currently unavailable for analytics reporting");
       }
+      return this.getEmptySummary();
+    }
+
+    // If an administrator has not created any departments, analytics metrics are zeroed
+    if (adminDepartmentIds !== undefined && adminDepartmentIds.length === 0) {
       return this.getEmptySummary();
     }
 
@@ -35,6 +40,8 @@ export class AnalyticsService {
         throw new ValidationError("Invalid departmentId format");
       }
       matchQuery.departmentId = new Types.ObjectId(filter.departmentId);
+    } else if (adminDepartmentIds && adminDepartmentIds.length > 0) {
+      matchQuery.departmentId = { $in: adminDepartmentIds.map((id) => new Types.ObjectId(id)) };
     }
 
     const now = new Date();
@@ -270,7 +277,13 @@ export class AnalyticsService {
       ]),
 
       // 7. Departments list for names
-      DepartmentModel.find().select("_id name").lean(),
+      DepartmentModel.find(
+        adminDepartmentIds
+          ? { _id: { $in: adminDepartmentIds.map((id) => new Types.ObjectId(id)) } }
+          : {}
+      )
+        .select("_id name")
+        .lean(),
     ]);
 
     const stats = overallStats[0] || {

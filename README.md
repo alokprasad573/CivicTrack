@@ -44,9 +44,11 @@ Municipal grievance management in most cities suffers from critical architectura
 * **Shared Zod Validation Schemas:** Client-side forms, REST route inputs, and WebSocket payloads share single-source-of-truth schemas, preventing runtime type drift and duplicate validation logic.
 * Decoupled frontend (`apps/web`), backend API (`apps/server`), and configuration (`packages/config`).
 
-### 2. 🔐 Dual-Identity Zero-Trust Security Architecture
+### 2. 🔐 Dual-Identity Zero-Trust Security & Creator Data Isolation
 * **Citizens:** Authenticated via **Clerk OAuth2** (Google, Email) with seamless session management and cryptographic webhook verification via **Svix**.
 * **Municipal Staff (Officers & Admins):** Authenticated via a hardened **Custom JWT System** with SHA-256 hashed refresh tokens, device fingerprinting, and `HttpOnly`, `SameSite=Strict` cookies shielded against XSS and CSRF.
+* **Creator-Based Admin Isolation:** Each administrator only accesses, monitors, and operates on departments they personally created (`createdByAdminId`). Cross-admin inspection, modification, or officer assignment is rejected with `403 Forbidden`.
+* **Safe Field Officer Deletion:** Eliminates orphaned records by clearing active assignments (preserving historical complaint logs and transparency), revoking staff sessions, disconnecting WebSockets, and revoking pending invitations.
 * **Role-Based Access Control (RBAC):** Strict tier isolation across `CITIZEN`, `OFFICER`, and `ADMIN` routes.
 
 ### 3. 🌐 Real-Time Bidirectional Event Streaming (Socket.IO)
@@ -271,6 +273,9 @@ npm test --workspace=@civictrack/server
 | :--- | :--- |
 | `npm run test:auth` | Citizen Clerk OAuth & Webhook cryptographic signature checks |
 | `npm run test:staff-auth` | Municipal staff JWT authentication, refresh rotation & cookie security |
+| `npm run test:admin-register` | Administrator registration real name validation & persistence |
+| `npm run test:admin-scoped-data` | Multi-tenant creator data isolation, cross-admin rejection & empty state protection |
+| `npm run test:officers` | Safe field officer deletion, referential integrity & department code filtering |
 | `npm run test:complaints` | Complaint lifecycle state machine, transitions & reference number generation |
 | `npm run test:socket` | Socket.IO room isolation, dual-handshake auth, and deduplication |
 | `npm run test:maps` | Ola Maps geocoding, directions API, and spatial bounding boxes |

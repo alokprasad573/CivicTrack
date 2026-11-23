@@ -1,30 +1,30 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/how-it-works(.*)",
-  "/admin/login(.*)",
-  "/admin/register(.*)",
-  "/officer/login(.*)",
-  "/officer/register(.*)",
-  "/map(.*)",
-  "/api(.*)",
-  "/docs(.*)",
-]);
+const PUBLIC_PREFIXES = [
+  "/sign-in",
+  "/sign-up",
+  "/how-it-works",
+  "/admin/login",
+  "/admin/register",
+  "/officer/login",
+  "/officer/register",
+  "/map",
+  "/api",
+  "/docs",
+];
 
-const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
-const isOfficerRoute = createRouteMatcher(["/officer(.*)"]);
-const isCitizenRoute = createRouteMatcher(["/citizen(.*)"]);
+function isPublicPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(prefix));
+}
 
 export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
   // 1. Staff: Admin portal guard (Custom JWT cookie)
   if (
-    isAdminRoute(req) &&
+    pathname.startsWith("/admin") &&
     !pathname.startsWith("/admin/login") &&
     !pathname.startsWith("/admin/register")
   ) {
@@ -41,7 +41,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   // 2. Staff: Officer portal guard (Custom JWT cookie)
   if (
-    isOfficerRoute(req) &&
+    pathname.startsWith("/officer") &&
     !pathname.startsWith("/officer/login") &&
     !pathname.startsWith("/officer/register")
   ) {
@@ -57,13 +57,13 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // 3. Citizen portal: Strictly guarded by Clerk
-  if (isCitizenRoute(req)) {
+  if (pathname.startsWith("/citizen")) {
     await auth.protect();
     return NextResponse.next();
   }
 
   // 4. General fallback: Protect non-public routes with Clerk
-  if (!isPublicRoute(req)) {
+  if (!isPublicPath(pathname)) {
     await auth.protect();
   }
 });

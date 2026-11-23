@@ -85,6 +85,20 @@ export class ComplaintQueryService {
         });
         throw new ForbiddenError("You can only view complaints within your assigned department");
       }
+    } else if (user.role === UserRole.ADMIN) {
+      const deptId = complaint.departmentId
+        ? complaint.departmentId instanceof Types.ObjectId
+          ? complaint.departmentId.toString()
+          : (complaint.departmentId as unknown as { _id: Types.ObjectId })._id.toString()
+        : null;
+
+      if (deptId) {
+        const { DepartmentModel } = await import("../departments/department.model.js");
+        const dept = await DepartmentModel.findById(deptId);
+        if (dept && dept.createdByAdminId && dept.createdByAdminId.toString() !== user.id) {
+          throw new ForbiddenError("You do not have permission to view complaints belonging to another administrator's department.");
+        }
+      }
     }
 
     const history = await ComplaintStatusHistoryModel.find({ complaintId: complaint._id })
@@ -141,11 +155,30 @@ export class ComplaintQueryService {
         }
       }
     } else if (options.user.role === UserRole.ADMIN) {
+      const { DepartmentModel } = await import("../departments/department.model.js");
+      const adminDepts = await DepartmentModel.find({
+        createdByAdminId: new Types.ObjectId(options.user.id),
+        isActive: true,
+      }).select("_id");
+      const adminDeptIds = adminDepts.map((d) => d._id);
+
       if (options.departmentId) {
         if (!Types.ObjectId.isValid(options.departmentId)) {
           throw new ValidationError("Invalid department ID format");
         }
-        query.departmentId = new Types.ObjectId(options.departmentId);
+        const requestedId = new Types.ObjectId(options.departmentId);
+        if (!adminDeptIds.some((id) => id.equals(requestedId))) {
+          throw new ForbiddenError("You do not have permission to view complaints for this department.");
+        }
+        query.departmentId = requestedId;
+      } else {
+        // Exclude complaints assigned to other admins' departments
+        const otherDepts = await DepartmentModel.find({
+          createdByAdminId: { $ne: new Types.ObjectId(options.user.id) },
+        }).select("_id");
+        if (otherDepts.length > 0) {
+          query.departmentId = { $nin: otherDepts.map((d) => d._id) };
+        }
       }
       if (options.assignedOfficerId) {
         if (!Types.ObjectId.isValid(options.assignedOfficerId)) {
@@ -261,8 +294,24 @@ export class ComplaintQueryService {
       query.category = category;
     }
 
-    return ComplaintModel.find(query)
-      .select("_id referenceNumber title category status priority location address createdAt")
-      .limit(limit);
+    try {
+      return await ComplaintModel.find(query)
+        .select("_id referenceNumber title category status priority location address createdAt")
+        .limit(limit);
+    } catch (err: any) {
+      if (err?.message?.includes("unable to find index for $geoNear query")) {
+        logger.warn("2dsphere index missing for findNearby. Auto-creating index and retrying...");
+        try {
+          await ComplaintModel.createIndexes();
+          return await ComplaintModel.find(query)
+            .select("_id referenceNumber title category status priority location address createdAt")
+            .limit(limit);
+        } catch (retryErr) {
+          logger.error("Failed to build 2dsphere index on demand for findNearby", { error: retryErr });
+          return [];
+        }
+      }
+      throw err;
+    }
   }
 }

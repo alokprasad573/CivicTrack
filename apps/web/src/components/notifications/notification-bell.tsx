@@ -143,7 +143,7 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded-lg transition-colors relative"
+        className="p-2  hover:text-foreground hover:bg-secondary/60 rounded-lg transition-colors relative"
         title="Notifications"
         aria-label="View notifications"
         aria-expanded={isOpen}

@@ -54,7 +54,7 @@ export function createApp(): Express {
   // CORS configuration
   app.use(
     cors({
-      origin: [env.CLIENT_URL],
+      origin: ["http://localhost:3000", "http://127.0.0.1/3000",env.CLIENT_URL],
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID", "svix-id", "svix-timestamp", "svix-signature"],
@@ -215,6 +215,7 @@ export function createApp(): Express {
   app.use("/api/v1/webhooks", authWebhookRateLimiter, identityRoutes);
   app.use("/webhooks", authWebhookRateLimiter, identityRoutes);
   app.use("/api/v1/users", userRoutes);
+  app.use("/users", userRoutes);
   app.use("/api/v1/departments", departmentRoutes);
   app.use("/api/v1/complaints", complaintRoutes);
   app.use("/api/v1/storage", uploadIntentRateLimiter, storageRoutes);

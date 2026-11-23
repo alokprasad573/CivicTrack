@@ -11,34 +11,91 @@ import {
 
 function isBenignOlaMapError(arg: any): boolean {
   if (!arg) return false;
+  const isMatch = (msg: string) =>
+    msg.includes("signal is aborted") ||
+    msg.includes("aborted without reason") ||
+    msg.includes("The operation was aborted") ||
+    msg.includes("The user aborted a request") ||
+    msg.includes('Source layer "3d_model"') ||
+    msg.includes("3d_model_data") ||
+    msg.includes("AbortError") ||
+    (msg.includes("Image") && msg.includes("could not be loaded"));
+
   if (arg instanceof Error || (typeof arg === "object" && arg !== null)) {
     if (arg.name === "AbortError") return true;
-    const msg = arg.message || "";
-    if (
-      msg.includes("signal is aborted") ||
-      msg.includes("aborted without reason") ||
-      msg.includes("The operation was aborted") ||
-      msg.includes("The user aborted a request") ||
-      msg.includes('Source layer "3d_model"') ||
-      msg.includes("3d_model_data")
-    ) {
-      return true;
-    }
+    return isMatch(arg.message || "");
   }
   if (typeof arg === "string") {
-    if (
-      arg.includes("signal is aborted") ||
-      arg.includes("aborted without reason") ||
-      arg.includes("The operation was aborted") ||
-      arg.includes("The user aborted a request") ||
-      arg.includes('Source layer "3d_model"') ||
-      arg.includes("3d_model_data") ||
-      arg.includes("AbortError")
-    ) {
-      return true;
-    }
+    return isMatch(arg);
   }
   return false;
+}
+
+const OLA_STYLE_ICON_FALLBACKS = new Set([
+  "ola-mobility-fastcharger",
+  "ola-mbo",
+  "pedestrian_polygon",
+]);
+
+function createGenericFallbackImage(imageId: string): ImageData {
+  const size = 16;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return { width: 1, height: 1, data: new Uint8ClampedArray(4) } as unknown as ImageData;
+  }
+
+  if (imageId.includes("polygon") || imageId.includes("pattern") || imageId.includes("pedestrian")) {
+    context.fillStyle = "rgba(203, 213, 225, 0.25)";
+    context.fillRect(0, 0, size, size);
+  } else {
+    context.clearRect(0, 0, size, size);
+  }
+
+  return context.getImageData(0, 0, size, size);
+}
+
+function createOlaStyleIconFallback(imageId: string): ImageData {
+  if (imageId === "pedestrian_polygon") {
+    return createGenericFallbackImage(imageId);
+  }
+
+  const size = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not create fallback map icon");
+
+  // Keep OLA's missing POI markers visible as clear, neutral map pins.
+  context.fillStyle = "#1769aa";
+  context.beginPath();
+  context.arc(size / 2, 13, 10, Math.PI, 0);
+  context.lineTo(16, 30);
+  context.lineTo(6, 13);
+  context.closePath();
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  if (imageId === "ola-mobility-fastcharger") {
+    context.beginPath();
+    context.moveTo(18, 5);
+    context.lineTo(11, 15);
+    context.lineTo(15, 15);
+    context.lineTo(13, 22);
+    context.lineTo(21, 12);
+    context.lineTo(17, 12);
+    context.closePath();
+    context.fill();
+  } else {
+    context.beginPath();
+    context.arc(16, 13, 4, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  return context.getImageData(0, 0, size, size);
 }
 
 // Intercept and suppress known benign Ola Maps SDK style warnings and fetch AbortErrors during teardown
@@ -148,6 +205,32 @@ export function useOlaMap(options: UseOlaMapOptions) {
           pitch: is3D ? 60 : 0,
           bearing: 0,
         });
+
+        // The OLA base style references these sprite IDs, but some style responses
+        // omit them. Supply local fallbacks so the map can still render those POIs.
+        const addMissingOlaStyleImage = (event: { id?: string }) => {
+          const imageId = event?.id;
+          if (!imageId) return;
+
+          try {
+            if (!mapInstance.hasImage(imageId)) {
+              if (OLA_STYLE_ICON_FALLBACKS.has(imageId)) {
+                mapInstance.addImage(imageId, createOlaStyleIconFallback(imageId));
+              } else {
+                mapInstance.addImage(imageId, createGenericFallbackImage(imageId));
+              }
+            }
+          } catch {
+            // Silently ignore if image was already registered or handled
+          }
+        };
+
+        mapInstance.on("styleimagemissing", addMissingOlaStyleImage);
+        // Register eagerly for MapLibre versions where the first missing-image
+        // event can fire before the handler is attached.
+        for (const imageId of OLA_STYLE_ICON_FALLBACKS) {
+          addMissingOlaStyleImage({ id: imageId });
+        }
 
         // If component unmounted while initializing, dispose instance immediately
         if (!isMountedRef.current) {

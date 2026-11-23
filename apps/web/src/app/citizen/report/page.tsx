@@ -260,7 +260,7 @@ export default function ReportComplaintPage() {
       {/* Stepped Form Container */}
       <div className="rounded-3xl border border-border bg-card shadow-xl shadow-primary/5 overflow-hidden">
         {/* Step Progress Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 sm:px-8 py-5 flex items-center justify-between text-white">
+        <div className="bg-blue-600 px-6 sm:px-8 py-5 flex items-center justify-between text-white">
           <span className="font-semibold text-sm sm:text-base">
             {step === 1 && "Step 1: What is the issue?"}
             {step === 2 && "Step 2: Where is it located?"}

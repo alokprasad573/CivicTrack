@@ -68,7 +68,8 @@ export default async function HomePage() {
                 <UserButton
                   appearance={{
                     elements: {
-                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-border",
+                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-border bg-blue-600 text-white [&_*]:text-white [&_svg]:fill-white",
+                      userButtonTrigger: "rounded-full bg-blue-600 text-white",
                     },
                   }}
                 />

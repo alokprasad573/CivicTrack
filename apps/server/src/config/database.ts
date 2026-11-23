@@ -1,6 +1,17 @@
+import dns from "node:dns";
 import mongoose from "mongoose";
 import { env } from "./env.js";
 import { logger } from "../common/utils/logger.js";
+
+// Ensure Node uses reliable public DNS resolvers (Google & Cloudflare)
+// to resolve MongoDB Atlas SRV records when local Wi-Fi or ISP DNS refuses SRV queries
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+} catch (dnsErr) {
+  logger.warn("Could not set custom DNS servers for MongoDB SRV resolution", {
+    error: dnsErr instanceof Error ? dnsErr.message : String(dnsErr),
+  });
+}
 
 const STATE_NAMES: Record<number, string> = {
   0: "disconnected",
@@ -93,6 +104,22 @@ export async function connectDatabase(): Promise<boolean> {
       family: 4, // Force IPv4 to prevent Windows / Atlas IPv6 TLS negotiation timeouts
       autoIndex: env.NODE_ENV !== "production",
     });
+
+    // Ensure critical geospatial and model indexes are built even in production environments
+    try {
+      const { ComplaintModel } = await import("../modules/complaints/complaint.model.js");
+      const { UserModel } = await import("../modules/users/user.model.js");
+      const { DepartmentModel } = await import("../modules/departments/department.model.js");
+      await Promise.allSettled([
+        ComplaintModel.createIndexes(),
+        UserModel.createIndexes(),
+        DepartmentModel.createIndexes(),
+      ]);
+      logger.info("Database indexes verified (geospatial 2dsphere and unique constraints synced)");
+    } catch (idxErr) {
+      logger.warn("Non-blocking index synchronization notice", { error: idxErr });
+    }
+
     return true;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

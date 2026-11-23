@@ -275,6 +275,12 @@ export class ComplaintWorkflowService {
       throw new NotFoundError(`Target department '${dto.departmentId}' does not exist.`);
     }
 
+    if (user.role === UserRole.ADMIN) {
+      if (department.createdByAdminId && department.createdByAdminId.toString() !== user.id) {
+        throw new ForbiddenError("You can only assign complaints to departments you created.");
+      }
+    }
+
     let officerName: string | undefined;
     if (dto.assignedOfficerId) {
       const officer = await UserModel.findById(dto.assignedOfficerId);

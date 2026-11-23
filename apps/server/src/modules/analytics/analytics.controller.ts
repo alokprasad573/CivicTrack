@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Types } from "mongoose";
 import { AnalyticsService } from "./analytics.service.js";
 import {
   ApiResponse,
@@ -36,7 +37,23 @@ export class AnalyticsController {
         filter.departmentId = req.user.departmentId;
       }
 
-      const summary = await AnalyticsService.getSummary(filter);
+      let adminDepartmentIds: string[] | undefined;
+      if (req.user.role === UserRole.ADMIN) {
+        const { DepartmentModel } = await import("../departments/department.model.js");
+        const adminDepts = await DepartmentModel.find({
+          createdByAdminId: new Types.ObjectId(req.user.id),
+          isActive: true,
+        }).select("_id");
+        adminDepartmentIds = adminDepts.map((d) => d._id.toString());
+
+        if (filter.departmentId) {
+          if (!adminDepartmentIds.includes(filter.departmentId)) {
+            throw new ForbiddenError("You do not have access to analytics for this department.");
+          }
+        }
+      }
+
+      const summary = await AnalyticsService.getSummary(filter, adminDepartmentIds);
 
       const response: ApiResponse<IAnalyticsSummary> = {
         success: true,

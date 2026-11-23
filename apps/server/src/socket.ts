@@ -255,6 +255,11 @@ export function initSocketServer(httpServer: HttpServer): Server {
                       error: clerkErr instanceof Error ? clerkErr.message : String(clerkErr),
                     });
                   }
+
+                  // Concurrency fallback: In case another concurrent request or HTTP call provisioned the user
+                  if (!user) {
+                    user = await UserService.findByClerkUserId(clerkUserId);
+                  }
                 }
 
                 if (user && user.isActive) {

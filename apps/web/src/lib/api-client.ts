@@ -26,9 +26,18 @@ export async function apiClient<T>(
 ): Promise<T> {
   const { token, headers = {}, ...customConfig } = options;
 
-  const url = endpoint.startsWith("http")
-    ? endpoint
-    : `${API_BASE_URL.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`;
+  let url: string;
+  if (endpoint.startsWith("http")) {
+    url = endpoint;
+  } else if (typeof window !== "undefined") {
+    // In browser client: use relative path /api/v1/... to leverage Next.js rewrites and cookies smoothly
+    const cleanEndpoint = endpoint.replace(/^\/?(api\/v1\/)?/, "");
+    url = `/api/v1/${cleanEndpoint}`;
+  } else {
+    // In server environment: use configured API_BASE_URL
+    const cleanEndpoint = endpoint.replace(/^\/?(api\/v1\/)?/, "");
+    url = `${API_BASE_URL.replace(/\/$/, "")}/${cleanEndpoint}`;
+  }
 
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",

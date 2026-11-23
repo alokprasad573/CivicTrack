@@ -4,7 +4,7 @@ import { StaffAuthService } from "./staff-auth.service.js";
 import {
   UserRole,
   ApiResponse,
-  PasswordSchema,
+  AdminRegisterSchema,
   CreateStaffInvitationSchema,
   AcceptStaffInvitationSchema,
 } from "@civictrack/contracts";
@@ -93,23 +93,7 @@ export class StaffAuthController {
    */
   public static async adminRegister(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const RegisterSchema = z
-        .object({
-          email: z.string().trim().email("Please provide a valid work email address").toLowerCase(),
-          name: z.string().trim().optional(),
-          password: PasswordSchema,
-          confirmPassword: z.string(),
-        })
-        .refine((data) => data.password === data.confirmPassword, {
-          message: "Passwords do not match",
-          path: ["confirmPassword"],
-        });
-
-      const dto = RegisterSchema.parse(req.body) as {
-        email: string;
-        name?: string;
-        password: string;
-      };
+      const dto = AdminRegisterSchema.parse(req.body);
 
       const result = await StaffAuthService.adminRegister({
         email: dto.email,

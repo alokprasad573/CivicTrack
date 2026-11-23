@@ -139,6 +139,22 @@ export default function AdminDepartmentsPage() {
             <AlertCircle className="w-7 h-7 mx-auto mb-2 text-rose-600" />
             <p className="text-xs font-semibold">{error}</p>
           </div>
+        ) : departments.length === 0 ? (
+          <div className="py-16 text-center bg-white border border-slate-200 rounded-3xl max-w-lg mx-auto p-8 shadow-sm">
+            <Building2 className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+            <h3 className="text-sm font-bold text-slate-800">No departments created yet</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+              You haven&apos;t registered any municipal departments. Click &quot;Register Department&quot; above to create your first department.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Register First Department</span>
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {departments.map((dept) => (

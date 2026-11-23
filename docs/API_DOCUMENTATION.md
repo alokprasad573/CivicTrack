@@ -205,10 +205,24 @@ CivicTrack uses the **Pre-Signed Upload Intent Flow** to prevent large media upl
 
 ---
 
-## 4. Municipal Staff Authentication & Session Management (`/staff/auth`)
+## 4. Municipal Staff Authentication & Session Management (`/staff/auth`, `/admin/auth`)
 
-### 4.1 Staff Login
-* **Endpoint:** `POST /api/v1/staff/auth/login`
+### 4.1 Administrator Direct Registration
+* **Endpoint:** `POST /api/v1/admin/auth/register`
+* **Request Body:**
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane.doe@civictrack.gov",
+  "password": "SecurePassword123!",
+  "confirmPassword": "SecurePassword123!"
+}
+```
+* **Validation:** Real name required (trimmed, min 2 chars, max 120 chars, cannot be blank).
+* **Response (`201 Created`):** Sets `civictrack_admin_token` and `civictrack_admin_refresh` HttpOnly cookies and returns the provisioned administrator profile.
+
+### 4.2 Staff Login
+* **Endpoint:** `POST /api/v1/admin/auth/login` or `POST /api/v1/officer/auth/login`
 * **Request Body:**
 ```json
 {
@@ -216,35 +230,53 @@ CivicTrack uses the **Pre-Signed Upload Intent Flow** to prevent large media upl
   "password": "SecurePassword123!"
 }
 ```
-* **Response (`200 OK`):** Sets `access_token` (15m) and `refresh_token` (7d) as `HttpOnly`, `Secure`, `SameSite=Strict` cookies. Returns user object and accessToken.
+* **Response (`200 OK`):** Sets `civictrack_admin_token` / `civictrack_officer_token` (15m) and refresh token (7d) as `HttpOnly`, `Secure` cookies.
 
-### 4.2 Refresh Access Token
-* **Endpoint:** `POST /api/v1/staff/auth/refresh`
-* **Auth:** HttpOnly `refresh_token` Cookie
-* **Response (`200 OK`):** Issues new `access_token` and rotates `refresh_token`.
+### 4.3 Refresh Access Token
+* **Endpoint:** `POST /api/v1/admin/auth/refresh` or `POST /api/v1/officer/auth/refresh`
+* **Auth:** HttpOnly refresh token cookie
+* **Response (`200 OK`):** Issues new access token and rotates refresh token.
 
-### 4.3 Staff Logout
-* **Endpoint:** `POST /api/v1/staff/auth/logout`
-* **Response (`200 OK`):** Marks `StaffSession` revoked in database and clears all authentication cookies.
+### 4.4 Staff Logout
+* **Endpoint:** `POST /api/v1/admin/auth/logout` or `POST /api/v1/officer/auth/logout`
+* **Response (`200 OK`):** Marks `StaffSession` revoked in database and clears authentication cookies.
 
-### 4.4 Staff Invitation Management (Admin)
-* `POST /api/v1/staff/invitations`: Generate officer invite with department mapping and cryptographic token.
-* `GET /api/v1/staff/invitations/verify?token=...`: Verify invitation token before displaying signup form.
-* `POST /api/v1/staff/invitations/accept`: Accept invite, create staff user, and set initial password.
-
----
-
-## 5. Municipal Departments (`/departments`)
-
-* `GET /api/v1/departments`: Public list of all active municipal departments and supported categories.
-* `POST /api/v1/departments` (`ADMIN`): Register a new department (`name`, `code`, `categories`).
-* `GET /api/v1/departments/:id`: Fetch department details.
-* `GET /api/v1/departments/:id/officers` (`ADMIN`, `OFFICER`): Fetch list of active officers assigned to a department.
+### 4.5 Staff Invitation Management (Admin)
+* `POST /api/v1/admin/invitations`: Generate officer invite with department mapping and cryptographic token. Verifies target department was created by requesting admin.
+* `GET /api/v1/officer/auth/invitation/verify?token=...`: Verify invitation token before displaying signup form.
+* `POST /api/v1/officer/auth/register`: Accept invite, create officer user, and set initial credentials.
 
 ---
 
-## 6. Geospatial & Navigation (`/maps`)
+## 5. Municipal Departments (`/departments`) — Creator-Scoped
 
+CivicTrack enforces strict **Creator-Based Admin Isolation**:
+* `GET /api/v1/departments`:
+  - When invoked by an authenticated `ADMIN`: strictly returns active departments created by that administrator (`createdByAdminId === admin.id`).
+  - When invoked by a `CITIZEN` or unauthenticated client: returns all public active municipal departments.
+* `POST /api/v1/departments` (`ADMIN`): Register a new department (`name`, `code`, `categories`). Automatically records `createdByAdminId`.
+* `GET /api/v1/departments/:id`: Fetch department details. Scoped to the creator admin or assigned officer (`403 Forbidden` for cross-admin access).
+* `PATCH /api/v1/departments/:id` (`ADMIN`): Update department name, code, or active status. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
+* `DELETE /api/v1/departments/:id` (`ADMIN`): Deactivate department. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
+* `GET /api/v1/departments/:id/officers` (`ADMIN`, `OFFICER`): Fetch list of active officers assigned to a department. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
+
+---
+
+## 6. Staff Governance & Directory (`/users`)
+
+* `GET /api/v1/users` (`ADMIN`, `OFFICER`): Staff directory with pagination, name/email search, role filtering, and department code filtering (`departmentCode=...`).
+  - For administrators: strictly constrained to officers belonging to departments created by the requesting admin.
+* `DELETE /api/v1/users/officers/:id` (`ADMIN`): Safely delete a field officer.
+  - Ownership validated: officer must belong to a department created by requesting admin.
+  - Referential integrity: unassigns active complaints, revokes sessions, disconnects sockets, revokes pending invites, while preserving historical complaint audit logs.
+* `DELETE /api/v1/users/:id` (`ADMIN`): REST alias for safe field officer deletion.
+* `PATCH /api/v1/users/:id/role` (`ADMIN`): Update user role and assign department. Enforces creator ownership check on the assigned department.
+
+---
+
+## 7. Geospatial & Navigation (`/maps`, `/complaints/nearby`)
+
+* `GET /api/v1/complaints/nearby?longitude=...&latitude=...&maxDistanceMeters=...`: Geospatial proximity search powered by MongoDB `2dsphere` index with auto-index synchronization and graceful fallback.
 * `GET /api/v1/maps/status`: Health and configuration check for Ola Maps SDK integration.
 * `GET /api/v1/maps/geocode?query=Indiranagar`: Search coordinates for an address query.
 * `GET /api/v1/maps/reverse-geocode?lat=12.9716&lng=77.5946`: Convert coordinates to formatted civic street address.
@@ -252,7 +284,7 @@ CivicTrack uses the **Pre-Signed Upload Intent Flow** to prevent large media upl
 
 ---
 
-## 7. Duplicate Detection (`/duplicates`)
+## 8. Duplicate Detection (`/duplicates`)
 
 * **Endpoint:** `POST /api/v1/duplicates/check`
 * **Auth:** Authenticated User

@@ -27,5 +27,10 @@
     "mongodb"
   ],
   "author": "CivicTrack Team",
-  "license": "ISC"
+  "license": "ISC",
+  "allowScripts": {
+    "@clerk/shared@3.48.1": true,
+    "esbuild@0.28.2": true,
+    "@scarf/scarf@1.4.0": true
+  }
 }
