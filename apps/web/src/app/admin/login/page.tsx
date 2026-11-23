@@ -3,7 +3,7 @@
 import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, Lock, Mail, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff, Check } from "lucide-react";
+import { Landmark, Lock, Mail, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff, Check } from "lucide-react";
 
 export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {
   const router = useRouter();
@@ -109,7 +109,7 @@ export function AdminAuthForm({ initialMode = "login" }: { initialMode?: "login"
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/25">
-              <ShieldCheck className="w-7 h-7" />
+              <Landmark className="w-7 h-7" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Municipal Admin Portal
