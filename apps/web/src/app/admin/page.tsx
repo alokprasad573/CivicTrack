@@ -13,6 +13,7 @@ import { STATUS_COLORS, CATEGORY_COLORS } from "../../lib/ola-maps-config";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { PriorityBadge } from "../../components/ui/priority-badge";
 import { useToast } from "../../components/ui/toast-context";
+import { useRealtimeComplaints } from "../../hooks/use-realtime-complaints";
 
 const SpatialMapPreview = dynamic(
   () =>
@@ -212,6 +213,69 @@ export default function AdminTriagePage() {
     }
     loadDepartments();
   }, []);
+
+  // Real-time live streaming integration for triage queue
+  useRealtimeComplaints({
+    onCreated: (newComplaint) => {
+      setComplaints((prev) => {
+        const id = newComplaint.complaintId;
+        if (prev.some((c) => (c._id || c.id) === id)) return prev;
+        return [
+          {
+            _id: id,
+            id,
+            referenceNumber: newComplaint.referenceNumber,
+            title: newComplaint.title,
+            category: newComplaint.category,
+            status: newComplaint.status,
+            priority: newComplaint.priority,
+            location: newComplaint.location,
+            address: newComplaint.address,
+            departmentId: newComplaint.departmentId,
+            createdAt: newComplaint.createdAt,
+            evidence: [],
+          },
+          ...prev,
+        ];
+      });
+      setTotal((prev) => prev + 1);
+      toast.info("New Complaint Received", `#${newComplaint.referenceNumber}: ${newComplaint.title}`);
+    },
+    onStatusUpdated: (update) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === update.complaintId
+            ? {
+                ...c,
+                status: update.status,
+                ...(update.priority ? { priority: update.priority } : {}),
+                ...(update.departmentId ? { departmentId: update.departmentId } : {}),
+                ...(update.assignedOfficerId ? { assignedOfficerId: update.assignedOfficerId } : {}),
+              }
+            : c
+        )
+      );
+    },
+    onAssigned: (assignment) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === assignment.complaintId
+            ? {
+                ...c,
+                status: ComplaintStatus.ASSIGNED,
+                departmentId: assignment.departmentId,
+                assignedOfficerId: assignment.assignedOfficerId,
+                ...(assignment.priority ? { priority: assignment.priority } : {}),
+                ...(assignment.dueAt ? { dueAt: assignment.dueAt } : {}),
+              }
+            : c
+        )
+      );
+    },
+    onReconnect: () => {
+      fetchComplaints();
+    },
+  });
 
   // Synchronize map selection with filtered complaints list
   useEffect(() => {

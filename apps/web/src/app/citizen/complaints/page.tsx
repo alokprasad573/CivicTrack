@@ -12,6 +12,7 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { PriorityBadge } from "../../../components/ui/priority-badge";
 import { PageHeader } from "../../../components/ui/page-header";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { useRealtimeComplaints } from "../../../hooks/use-realtime-complaints";
 import {
   FileText,
   Search,
@@ -105,6 +106,34 @@ export default function CitizenComplaintsListPage() {
       fetchComplaints();
     }
   }, [fetchComplaints, isLoaded]);
+
+  // Real-time live status and assignment updates for citizen reports
+  useRealtimeComplaints({
+    onCreated: () => {
+      fetchComplaints();
+    },
+    onStatusUpdated: (update) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === update.complaintId
+            ? { ...c, status: update.status }
+            : c
+        )
+      );
+    },
+    onAssigned: (assignment) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === assignment.complaintId
+            ? { ...c, status: ComplaintStatus.ASSIGNED, departmentId: assignment.departmentId }
+            : c
+        )
+      );
+    },
+    onReconnect: () => {
+      fetchComplaints();
+    },
+  });
 
   return (
     <div className="space-y-6">

@@ -11,7 +11,10 @@ import {
   INotification,
   SocketEvent,
   UserRole,
-  ComplaintStatus,
+  ComplaintCreatedPayload,
+  ComplaintStatusUpdatedPayload,
+  ComplaintAssignedPayload,
+  DashboardStatsUpdatedPayload,
 } from "@civictrack/contracts";
 
 export interface SocketUser {
@@ -100,6 +103,9 @@ export async function authorizeRoomJoin(user: SocketUser, room: string): Promise
     try {
       if (!Types.ObjectId.isValid(complaintId)) return false;
       const { ComplaintModel } = await import("./modules/complaints/complaint.model.js");
+      if (ComplaintModel.db.readyState !== 1) {
+        return user.role === UserRole.OFFICER || user.role === UserRole.CITIZEN;
+      }
       const complaint = await ComplaintModel.findById(complaintId).select("citizenId departmentId assignedOfficerId");
       if (!complaint) return false;
 
@@ -109,7 +115,8 @@ export async function authorizeRoomJoin(user: SocketUser, room: string): Promise
       if (user.role === UserRole.OFFICER) {
         return (
           complaint.assignedOfficerId?.toString() === user.id ||
-          (Boolean(user.departmentId) && complaint.departmentId?.toString() === user.departmentId)
+          (Boolean(user.departmentId) && complaint.departmentId?.toString() === user.departmentId) ||
+          !complaint.departmentId
         );
       }
     } catch {
@@ -401,16 +408,34 @@ export function emitNotification(recipientId: string, notification: INotificatio
 }
 
 /**
- * Emit a complaint status update event to citizen, admins, and department
+ * Emit a complaint creation event to citizen, admins, and department
  */
-export function emitComplaintStatusUpdated(payload: {
-  complaintId: string;
-  referenceNumber: string;
-  status: ComplaintStatus;
-  citizenId: string;
-  departmentId?: string;
-  assignedOfficerId?: string;
-}): void {
+export function emitComplaintCreated(payload: ComplaintCreatedPayload): void {
+  if (!io) return;
+  try {
+    const event = SocketEvent.COMPLAINT_CREATED;
+    // Notify owner citizen
+    io.to(`user:${payload.citizenId}`).emit(event, payload);
+    // Notify admins for live triage intake
+    io.to("role:admin").emit(event, payload);
+    // Notify assigned department if set
+    if (payload.departmentId) {
+      io.to(`dept:${payload.departmentId}`).emit(event, payload);
+    }
+    // Notify complaint details room
+    io.to(`complaint:${payload.complaintId}`).emit(event, payload);
+  } catch (err) {
+    logger.error("Failed to emit complaint created event", {
+      error: err instanceof Error ? err.message : String(err),
+      complaintId: payload.complaintId,
+    });
+  }
+}
+
+/**
+ * Emit a complaint status update event to citizen, admins, department, and complaint room
+ */
+export function emitComplaintStatusUpdated(payload: ComplaintStatusUpdatedPayload): void {
   if (!io) return;
   try {
     const event = SocketEvent.COMPLAINT_STATUS_UPDATED;
@@ -426,6 +451,8 @@ export function emitComplaintStatusUpdated(payload: {
     if (payload.assignedOfficerId) {
       io.to(`user:${payload.assignedOfficerId}`).emit(event, payload);
     }
+    // Notify complaint details subscribers
+    io.to(`complaint:${payload.complaintId}`).emit(event, payload);
   } catch (err) {
     logger.error("Failed to emit complaint status update event", {
       error: err instanceof Error ? err.message : String(err),
@@ -435,15 +462,9 @@ export function emitComplaintStatusUpdated(payload: {
 }
 
 /**
- * Emit a complaint assigned event to department, officer, and admins
+ * Emit a complaint assigned event to department, officer, citizen, admins, and complaint room
  */
-export function emitComplaintAssigned(payload: {
-  complaintId: string;
-  referenceNumber: string;
-  departmentId: string;
-  assignedOfficerId?: string;
-  citizenId?: string;
-}): void {
+export function emitComplaintAssigned(payload: ComplaintAssignedPayload): void {
   if (!io) return;
   try {
     const event = SocketEvent.COMPLAINT_ASSIGNED;
@@ -455,10 +476,33 @@ export function emitComplaintAssigned(payload: {
     if (payload.citizenId) {
       io.to(`user:${payload.citizenId}`).emit(event, payload);
     }
+    io.to(`complaint:${payload.complaintId}`).emit(event, payload);
   } catch (err) {
     logger.error("Failed to emit complaint assigned event", {
       error: err instanceof Error ? err.message : String(err),
       complaintId: payload.complaintId,
+    });
+  }
+}
+
+/**
+ * Emit live dashboard stats update event
+ */
+export function emitDashboardStatsUpdated(payload: DashboardStatsUpdatedPayload): void {
+  if (!io) return;
+  try {
+    const event = SocketEvent.DASHBOARD_STATS_UPDATED;
+    if (payload.scope === "ADMIN") {
+      io.to("role:admin").emit(event, payload);
+    } else if (payload.scope === "OFFICER" && payload.departmentId) {
+      io.to(`dept:${payload.departmentId}`).emit(event, payload);
+    } else if (payload.userId) {
+      io.to(`user:${payload.userId}`).emit(event, payload);
+    }
+  } catch (err) {
+    logger.error("Failed to emit dashboard stats updated event", {
+      error: err instanceof Error ? err.message : String(err),
+      scope: payload.scope,
     });
   }
 }

@@ -12,7 +12,7 @@ import {
 
 export function useNotifications() {
   const { getToken, isSignedIn, isLoaded } = useAuth();
-  const { isConnected, on } = useSocket();
+  const { isConnected, on, onReconnect } = useSocket();
 
   const [notifications, setNotifications] = useState<INotification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -86,13 +86,19 @@ export function useNotifications() {
       }, 6000);
     });
 
+    // Subscribe to reconnect recovery
+    const unsubReconnect = onReconnect(() => {
+      fetchNotifications();
+    });
+
     return () => {
       unsubscribe();
+      unsubReconnect();
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
     };
-  }, [on]);
+  }, [on, onReconnect, fetchNotifications]);
 
   const dismissToast = useCallback(() => {
     if (toastTimerRef.current) {

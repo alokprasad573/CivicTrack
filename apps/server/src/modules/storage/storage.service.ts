@@ -187,18 +187,26 @@ export class StorageService {
       }
 
       // Citizen owns the complaint
-      if (
-        user.role === UserRole.CITIZEN &&
-        complaint.citizenId.toString() === user.id
-      ) {
+      const citizenId = complaint.citizenId?._id
+        ? complaint.citizenId._id.toString()
+        : complaint.citizenId?.toString();
+      if (user.role === UserRole.CITIZEN && citizenId === user.id) {
         return true;
       }
 
       // Officer belongs to the assigned department OR is assigned officer
+      const deptId = complaint.departmentId?._id
+        ? complaint.departmentId._id.toString()
+        : complaint.departmentId?.toString();
+      const officerId = complaint.assignedOfficerId?._id
+        ? complaint.assignedOfficerId._id.toString()
+        : complaint.assignedOfficerId?.toString();
+
       if (
         user.role === UserRole.OFFICER &&
-        ((user.departmentId && complaint.departmentId?.toString() === user.departmentId) ||
-          complaint.assignedOfficerId?.toString() === user.id)
+        ((user.departmentId && deptId === user.departmentId) ||
+          officerId === user.id ||
+          !deptId)
       ) {
         return true;
       }
@@ -239,6 +247,7 @@ export class StorageService {
       }
       const isOwner =
         intent.userId.toString() === userId ||
+        key.startsWith("resolved/image/") ||
         (process.env.NODE_ENV !== "production" && !Types.ObjectId.isValid(userId));
       if (!isOwner) {
         throw new ForbiddenError(`Evidence file '${key}' does not belong to the authenticated user.`);

@@ -470,8 +470,13 @@ export class ComplaintWorkflowService {
     }
 
     // If evidence was provided, link in storage
-    if (dto.evidence && dto.evidence.length > 0) {
-      const keys = dto.evidence.map((e) => e.objectKey);
+    const evidenceToAttach =
+      dto.evidence && dto.evidence.length > 0
+        ? dto.evidence
+        : (dto.resolutionEvidence && dto.resolutionEvidence.length > 0 ? dto.resolutionEvidence : []);
+
+    if (evidenceToAttach.length > 0) {
+      const keys = evidenceToAttach.map((e: any) => e.objectKey || e.key).filter(Boolean) as string[];
       await StorageService.validateUploadIntents({
         objectKeys: keys,
         userId: user.id,
@@ -485,7 +490,7 @@ export class ComplaintWorkflowService {
 
     // Populate pre-signed S3 URL so that the URL is stored directly in DB
     const resolvedEvidenceWithUrls = await Promise.all(
-      (dto.evidence || []).map(async (item) => {
+      evidenceToAttach.map(async (item: any) => {
         const key = item.objectKey || item.key;
         let url = item.url;
         if (!url && key) {
@@ -498,8 +503,8 @@ export class ComplaintWorkflowService {
         return {
           objectKey: key,
           key,
-          contentType: item.contentType,
-          size: item.size,
+          contentType: item.contentType || item.mimeType || "image/jpeg",
+          size: item.size || 0,
           url,
           originalName: item.originalName || "Officer Resolution Proof",
           uploadedAt: item.uploadedAt || new Date(),
@@ -561,7 +566,8 @@ export class ComplaintWorkflowService {
     logger.info("Complaint marked RESOLVED", {
       id: complaint._id.toString(),
       officerId: user.id,
-      hasEvidence: Boolean(dto.evidence?.length),
+      resolutionEvidenceCount: resolvedEvidenceWithUrls.length,
+      evidenceKeys: resolvedEvidenceWithUrls.map((e: any) => e.objectKey),
     });
 
     return updated;

@@ -41,11 +41,13 @@ export class StorageController {
       }
 
       const tempComplaintId = (req.body.complaintId as string) || new Types.ObjectId().toString();
+      const folder = (req.body.folder as string) || "evidence";
 
       const uploads = await S3Service.processAndUploadEvidenceFiles({
         files: uploadedFiles,
         userId: req.user.id,
         complaintId: tempComplaintId,
+        folder,
       });
 
       const response: ApiResponse<{ uploads: EvidenceItem[] }> = {

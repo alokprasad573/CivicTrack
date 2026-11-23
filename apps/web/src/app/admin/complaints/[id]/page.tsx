@@ -13,6 +13,7 @@ import { PriorityBadge } from "../../../../components/ui/priority-badge";
 import { CATEGORY_COLORS } from "../../../../lib/ola-maps-config";
 import { ComplaintStatusTracker } from "../../../../components/complaints/complaint-status-tracker";
 import { EvidenceLightbox, EvidenceImageItem } from "../../../../components/evidence/evidence-lightbox";
+import { useComplaintDetailRealtime } from "../../../../hooks/use-complaint-detail-realtime";
 import {
   ArrowLeft,
   Calendar,
@@ -86,6 +87,22 @@ export default function AdminComplaintDetailPage({
   const [assignNotes, setAssignNotes] = useState("");
   const [closeRemarks, setCloseRemarks] = useState("");
 
+  const refreshImageUrl = async (key: string) => {
+    try {
+      const res = await fetch(`/api/v1/storage/view-url?objectKey=${encodeURIComponent(key)}`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data?.viewUrl) {
+          setViewUrls((prev) => ({ ...prev, [key]: data.data.viewUrl }));
+        }
+      }
+    } catch {
+      // Ignore background refresh error
+    }
+  };
+
   const loadDetails = async () => {
     setIsLoading(true);
     setError(null);
@@ -153,6 +170,21 @@ export default function AdminComplaintDetailPage({
   useEffect(() => {
     loadDetails();
   }, [complaintId]);
+
+  // Real-time live room updates for this complaint
+  useComplaintDetailRealtime({
+    complaintId,
+    onRefresh: () => {
+      loadDetails();
+    },
+    onStatusUpdated: (update) => {
+      setComplaint((prev: any) => (prev ? { ...prev, status: update.status } : prev));
+      loadDetails();
+    },
+    onAssigned: () => {
+      loadDetails();
+    },
+  });
 
   // Load officers when assign department changes
   useEffect(() => {
@@ -603,6 +635,10 @@ export default function AdminComplaintDetailPage({
                           src={item.url}
                           alt={item.originalName || "Citizen Evidence"}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={() => {
+                            const k = item.objectKey || item.key;
+                            if (k) refreshImageUrl(k);
+                          }}
                         />
                       ) : (
                         <div className="text-[10px] text-muted-foreground">Loading preview...</div>
@@ -650,6 +686,10 @@ export default function AdminComplaintDetailPage({
                             src={item.url}
                             alt={item.originalName || "Resolution Evidence"}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={() => {
+                              const k = item.objectKey || item.key;
+                              if (k) refreshImageUrl(k);
+                            }}
                           />
                         ) : (
                           <div className="text-[10px] text-muted-foreground">Loading preview...</div>

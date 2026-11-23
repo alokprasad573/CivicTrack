@@ -11,6 +11,7 @@ import { CATEGORY_COLORS } from "../../lib/ola-maps-config";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { PriorityBadge } from "../../components/ui/priority-badge";
 import { useToast } from "../../components/ui/toast-context";
+import { useRealtimeComplaints } from "../../hooks/use-realtime-complaints";
 import {
   Wrench,
   CheckCircle2,
@@ -97,6 +98,26 @@ export default function OfficerDashboardPage() {
     fetchQueue();
   }, [fetchQueue]);
 
+  // Real-time live queue and task assignment updates
+  useRealtimeComplaints({
+    onAssigned: (assignment) => {
+      fetchQueue();
+      toast.info("New Task Assigned", `Complaint #${assignment.referenceNumber} has been assigned.`);
+    },
+    onStatusUpdated: (update) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === update.complaintId
+            ? { ...c, status: update.status }
+            : c
+        )
+      );
+    },
+    onReconnect: () => {
+      fetchQueue();
+    },
+  });
+
   // Start work quick action
   const handleStartWork = async (complaintId: string) => {
     try {
@@ -122,8 +143,14 @@ export default function OfficerDashboardPage() {
   const handleResolutionPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const files = Array.from(e.target.files);
+    const complaintId = resolveModalComplaint?._id || resolveModalComplaint?.id;
 
     for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        setResolutionError(`File "${file.name}" exceeds maximum allowed size of 10MB.`);
+        continue;
+      }
+
       const previewUrl = URL.createObjectURL(file);
       const newPhoto: UploadedResolutionPhoto = {
         file,
@@ -133,6 +160,10 @@ export default function OfficerDashboardPage() {
 
       setResolutionPhotos((prev) => [...prev, newPhoto]);
 
+      let uploadedKey: string | null = null;
+      let uploadError: string | null = null;
+
+      // Strategy 1: Attempt S3 Pre-signed Upload
       try {
         const intentRes = await fetch("/api/v1/storage/upload-intent", {
           method: "POST",
@@ -140,7 +171,7 @@ export default function OfficerDashboardPage() {
           credentials: "include",
           body: JSON.stringify({
             folder: "resolved",
-            complaintId: resolveModalComplaint?._id || resolveModalComplaint?.id,
+            complaintId,
             files: [
               {
                 filename: file.name,
@@ -151,32 +182,76 @@ export default function OfficerDashboardPage() {
           }),
         });
 
-        if (!intentRes.ok) throw new Error("Could not get upload credentials");
-        const intentJson = await intentRes.json();
-        const uploadItem = intentJson.data?.uploads?.[0] || intentJson.data?.uploadIntents?.[0];
-        if (!uploadItem) throw new Error("Upload intent missing");
+        if (intentRes.ok) {
+          const intentJson = await intentRes.json();
+          const uploadItem = intentJson.data?.uploads?.[0] || intentJson.data?.uploadIntents?.[0];
+          if (uploadItem?.uploadUrl) {
+            const putRes = await fetch(uploadItem.uploadUrl, {
+              method: "PUT",
+              headers: {
+                "Content-Type": file.type || "image/jpeg",
+                ...(uploadItem.headers || {}),
+              },
+              body: file,
+            });
 
-        await fetch(uploadItem.uploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": file.type || "image/jpeg",
-            ...(uploadItem.headers || {}),
-          },
-          body: file,
-        });
+            if (putRes.ok) {
+              uploadedKey = uploadItem.objectKey;
+            } else {
+              throw new Error(`Direct S3 upload rejected with status ${putRes.status}`);
+            }
+          }
+        }
+      } catch (presignedErr: any) {
+        console.warn("Direct S3 PUT failed, falling back to server multipart upload:", presignedErr?.message);
+      }
 
+      // Strategy 2: Fallback to Server Multipart Upload (Server -> S3, zero browser CORS issue)
+      if (!uploadedKey) {
+        try {
+          const formData = new FormData();
+          formData.append("evidenceImages", file);
+          formData.append("folder", "resolved");
+          if (complaintId) {
+            formData.append("complaintId", complaintId);
+          }
+
+          const uploadRes = await fetch("/api/v1/storage/upload", {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          });
+
+          if (uploadRes.ok) {
+            const uploadJson = await uploadRes.json();
+            const item = uploadJson.data?.uploads?.[0];
+            if (item?.objectKey || item?.key) {
+              uploadedKey = item.objectKey || item.key;
+            } else {
+              throw new Error("Server upload succeeded but objectKey missing in response");
+            }
+          } else {
+            const errJson = await uploadRes.json().catch(() => ({}));
+            throw new Error(errJson.error?.message || `Upload failed (${uploadRes.status})`);
+          }
+        } catch (fallbackErr: any) {
+          uploadError = fallbackErr?.message || "Photo upload failed";
+        }
+      }
+
+      if (uploadedKey) {
         setResolutionPhotos((prev) =>
           prev.map((p) =>
             p.previewUrl === previewUrl
-              ? { ...p, isUploading: false, objectKey: uploadItem.objectKey }
+              ? { ...p, isUploading: false, objectKey: uploadedKey! }
               : p
           )
         );
-      } catch (err: any) {
+      } else {
         setResolutionPhotos((prev) =>
           prev.map((p) =>
             p.previewUrl === previewUrl
-              ? { ...p, isUploading: false, error: err.message || "Upload failed" }
+              ? { ...p, isUploading: false, error: uploadError || "Upload failed" }
               : p
           )
         );
@@ -191,7 +266,24 @@ export default function OfficerDashboardPage() {
   // Submit resolution handler
   const handleResolveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resolveModalComplaint || !resolutionRemarks.trim()) return;
+    setResolutionError(null);
+
+    if (!resolveModalComplaint) return;
+    if (resolutionRemarks.trim().length < 10) {
+      setResolutionError("Resolution remarks must be at least 10 characters detailing repair work.");
+      return;
+    }
+
+    if (resolutionPhotos.some((p) => p.isUploading)) {
+      setResolutionError("Please wait for all resolution photos to finish uploading.");
+      return;
+    }
+
+    const failedPhotos = resolutionPhotos.filter((p) => p.error || !p.objectKey);
+    if (resolutionPhotos.length > 0 && failedPhotos.length > 0) {
+      setResolutionError("One or more photos failed to upload. Please remove failed photos or re-upload before submitting.");
+      return;
+    }
 
     const uploadedEvidence = resolutionPhotos
       .filter((p) => p.objectKey)
@@ -204,7 +296,6 @@ export default function OfficerDashboardPage() {
       }));
 
     setIsSubmittingResolution(true);
-    setResolutionError(null);
 
     try {
       const res = await fetch(`/api/v1/complaints/${resolveModalComplaint._id || resolveModalComplaint.id}/resolve`, {
@@ -214,6 +305,7 @@ export default function OfficerDashboardPage() {
         body: JSON.stringify({
           remarks: resolutionRemarks.trim(),
           evidence: uploadedEvidence,
+          resolutionEvidence: uploadedEvidence,
         }),
       });
 
@@ -566,19 +658,37 @@ export default function OfficerDashboardPage() {
                             alt="Preview"
                             className="w-full h-full object-cover"
                           />
-                          {photo.isUploading && (
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                          {photo.isUploading ? (
+                            <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center text-white">
+                              <Loader2 className="w-4 h-4 animate-spin text-white" />
                             </div>
-                          )}
-                          {!photo.isUploading && (
-                            <button
-                              type="button"
-                              onClick={() => removeResolutionPhoto(idx)}
-                              className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                          ) : photo.error ? (
+                            <div className="absolute inset-0 bg-rose-900/80 flex flex-col items-center justify-center p-1 text-center">
+                              <AlertCircle className="w-4 h-4 text-white mb-0.5" />
+                              <span className="text-[9px] text-white font-medium leading-tight line-clamp-2">Upload failed</span>
+                              <button
+                                type="button"
+                                onClick={() => removeResolutionPhoto(idx)}
+                                className="mt-1 p-0.5 rounded-full bg-white/20 hover:bg-rose-600 text-white transition"
+                                title="Remove photo"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-emerald-600/90 text-white text-[9px] font-bold flex items-center gap-0.5 shadow-sm">
+                                <CheckCircle2 className="w-2.5 h-2.5" />
+                                <span>Ready</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeResolutionPhoto(idx)}
+                                className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </>
                           )}
                         </div>
                       ))}

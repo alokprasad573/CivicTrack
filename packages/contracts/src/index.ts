@@ -9,3 +9,4 @@ export * from "./analytics";
 export * from "./duplicate-detection";
 export * from "./sla";
 export * from "./auth";
+export * from "./realtime";

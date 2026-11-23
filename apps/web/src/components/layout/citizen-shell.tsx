@@ -70,9 +70,6 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
                     Citizen
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground hidden sm:block">
-                  Civic Complaints & Neighborhood Improvements
-                </p>
               </div>
             </Link>
           </div>
@@ -207,7 +204,7 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
       {/* Desktop Footer */}
       <footer className="border-t border-border bg-card/50 py-5 text-xs text-muted-foreground mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <p>© {new Date().getFullYear()} CivicTrack &bull; Municipal Civic Issue Resolution</p>
+          <p>© {new Date().getFullYear()} CivicTrack &bull; Smart City Civic Issue Resolution Platform</p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>Fast Reporting</span>
             <span>&bull;</span>

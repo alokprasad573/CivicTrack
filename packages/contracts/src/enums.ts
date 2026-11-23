@@ -48,4 +48,6 @@ export enum SocketEvent {
   NOTIFICATION_NEW = "notification:new",
   COMPLAINT_STATUS_UPDATED = "complaint:status-updated",
   COMPLAINT_ASSIGNED = "complaint:assigned",
+  COMPLAINT_CREATED = "complaint:created",
+  DASHBOARD_STATS_UPDATED = "dashboard:stats-updated",
 }

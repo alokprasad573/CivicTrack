@@ -325,7 +325,7 @@ export default function ReportComplaintPage() {
               <div className="space-y-4 pt-2">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-foreground">
-                    Brief Summary *
+                    Problem Name *
                   </label>
                   <input
                     type="text"

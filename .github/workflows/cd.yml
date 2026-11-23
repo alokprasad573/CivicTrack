@@ -1,0 +1,155 @@
+name: CivicTrack Continuous Deployment (CD)
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target Deployment Environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ========================================================
+  # Job 1: Build & Publish Production Container Images (GHCR)
+  # ========================================================
+  publish-images:
+    name: Build & Publish Production Images (GHCR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Image Metadata (Server)
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/server
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Generate Image Metadata (Web)
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/web
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+
+      - name: Build & Push CivicTrack Server Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          push: true
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Push CivicTrack Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ========================================================
+  # Job 2: Automated Cloud Deployment (Deploy Hooks / Webhooks)
+  # ========================================================
+  deploy-services:
+    name: Deploy to Cloud Infrastructure
+    runs-on: ubuntu-latest
+    needs: [publish-images]
+    steps:
+      - name: Trigger Backend Deployment (Deploy Hook)
+        if: env.SERVER_DEPLOY_HOOK_URL != ''
+        env:
+          SERVER_DEPLOY_HOOK_URL: ${{ secrets.SERVER_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Triggering backend deployment webhook..."
+          curl -sS -X POST "${SERVER_DEPLOY_HOOK_URL}"
+          echo "Backend deployment webhook successfully dispatched."
+
+      - name: Trigger Frontend Deployment (Deploy Hook)
+        if: env.WEB_DEPLOY_HOOK_URL != ''
+        env:
+          WEB_DEPLOY_HOOK_URL: ${{ secrets.WEB_DEPLOY_HOOK_URL }}
+        run: |
+          echo "Triggering frontend deployment webhook..."
+          curl -sS -X POST "${WEB_DEPLOY_HOOK_URL}"
+          echo "Frontend deployment webhook successfully dispatched."
+
+      - name: Record Deployment Summary
+        run: |
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          ## 🚀 CivicTrack Production CD Deployment Summary
+
+          | Service | Destination | Status |
+          | :--- | :--- | :--- |
+          | **Backend API (Server)** | `ghcr.io/${{ github.repository }}/server:${{ github.sha }}` | ✅ Image Published |
+          | **Frontend Web** | `ghcr.io/${{ github.repository }}/web:${{ github.sha }}` | ✅ Image Published |
+
+          - **Commit Ref:** `${{ github.sha }}`
+          - **Triggered By:** `${{ github.actor }}` on `${{ github.ref_name }}`
+          EOF
+
+  # ========================================================
+  # Job 3: Post-Deployment Health Check Verification
+  # ========================================================
+  verify-health:
+    name: Post-Deployment Live Healthcheck
+    runs-on: ubuntu-latest
+    needs: [deploy-services]
+    if: env.PRODUCTION_API_URL != ''
+    env:
+      PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL || secrets.PRODUCTION_API_URL }}
+    steps:
+      - name: Wait for Cloud Instance Warmup
+        run: sleep 15
+
+      - name: Probe Server Health Endpoint
+        run: |
+          TARGET="${PRODUCTION_API_URL%/}/health"
+          echo "Probing production health endpoint: ${TARGET}"
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${TARGET}" || echo "000")
+          echo "Received HTTP status code: ${STATUS_CODE}"
+          if [ "${STATUS_CODE}" -ne 200 ]; then
+            echo "::error::Health check failed with HTTP status ${STATUS_CODE}"
+            exit 1
+          fi
+          echo "Production service is healthy and responding to live traffic (200 OK)."

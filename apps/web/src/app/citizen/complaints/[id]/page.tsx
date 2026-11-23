@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -15,6 +15,7 @@ import { StatusBadge } from "../../../../components/ui/status-badge";
 import { PriorityBadge } from "../../../../components/ui/priority-badge";
 import { PageHeader } from "../../../../components/ui/page-header";
 import { useToast } from "../../../../components/ui/toast-context";
+import { useComplaintDetailRealtime } from "../../../../hooks/use-complaint-detail-realtime";
 import {
   ArrowLeft,
   Calendar,
@@ -74,7 +75,8 @@ export default function CitizenComplaintDetailPage({
   const refreshImageUrl = async (objectKey: string) => {
     try {
       const res = await fetch(
-        `/api/v1/storage/view-url?objectKey=${encodeURIComponent(objectKey)}`
+        `/api/v1/storage/view-url?objectKey=${encodeURIComponent(objectKey)}`,
+        { credentials: "include" }
       );
       if (res.ok) {
         const json = await res.json();
@@ -90,71 +92,86 @@ export default function CitizenComplaintDetailPage({
     }
   };
 
-  useEffect(() => {
-    async function loadComplaintDetails() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/v1/complaints/${complaintId}`, {
-          credentials: "include",
-        });
-        if (!res.ok) {
-          throw new Error(
-            res.status === 404
-              ? "Report not found"
-              : `Failed to load details (${res.status})`
-          );
-        }
-
-        const json = await res.json();
-        if (json.success && json.data) {
-          const comp = json.data.complaint || json.data;
-          const hist = json.data.history || [];
-          setComplaint(comp);
-          setHistory(hist);
-
-          // Populate direct pre-signed URLs from server
-          const initialMap: Record<string, string> = {};
-          const allEv = [
-            ...(comp.evidence || []),
-            ...(comp.resolutionEvidence || []),
-            ...hist.flatMap((h: any) => h.evidence || []),
-          ];
-          for (const ev of allEv) {
-            const k = ev.objectKey || ev.key;
-            if (k && ev.url) {
-              initialMap[k] = ev.url;
-            }
-          }
-          setViewUrls((prev) => ({ ...prev, ...initialMap }));
-
-          // Fetch pre-signed URLs for citizen evidence
-          const evidenceList = comp.evidence || [];
-          for (const ev of evidenceList) {
-            const key = ev.objectKey || ev.key;
-            if (key && !initialMap[key]) {
-              refreshImageUrl(key);
-            }
-          }
-
-          // Fetch resolution evidence URLs
-          const resEvidenceList = comp.resolutionEvidence || [];
-          for (const ev of resEvidenceList) {
-            const key = ev.objectKey || ev.key;
-            if (key && !initialMap[key]) {
-              refreshImageUrl(key);
-            }
-          }
-        }
-      } catch (err: any) {
-        setError(err.message || "Failed to load report");
-      } finally {
-        setIsLoading(false);
+  const loadComplaintDetails = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/complaints/${complaintId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error(
+          res.status === 404
+            ? "Report not found"
+            : `Failed to load details (${res.status})`
+        );
       }
-    }
 
-    loadComplaintDetails();
+      const json = await res.json();
+      if (json.success && json.data) {
+        const comp = json.data.complaint || json.data;
+        const hist = json.data.history || [];
+        setComplaint(comp);
+        setHistory(hist);
+
+        // Populate direct pre-signed URLs from server
+        const initialMap: Record<string, string> = {};
+        const allEv = [
+          ...(comp.evidence || []),
+          ...(comp.resolutionEvidence || []),
+          ...hist.flatMap((h: any) => h.evidence || []),
+        ];
+        for (const ev of allEv) {
+          const k = ev.objectKey || ev.key;
+          if (k && ev.url) {
+            initialMap[k] = ev.url;
+          }
+        }
+        setViewUrls((prev) => ({ ...prev, ...initialMap }));
+
+        // Fetch pre-signed URLs for citizen evidence
+        const evidenceList = comp.evidence || [];
+        for (const ev of evidenceList) {
+          const key = ev.objectKey || ev.key;
+          if (key && !initialMap[key]) {
+            refreshImageUrl(key);
+          }
+        }
+
+        // Fetch resolution evidence URLs
+        const resEvidenceList = comp.resolutionEvidence || [];
+        for (const ev of resEvidenceList) {
+          const key = ev.objectKey || ev.key;
+          if (key && !initialMap[key]) {
+            refreshImageUrl(key);
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to load report");
+    } finally {
+      setIsLoading(false);
+    }
   }, [complaintId]);
+
+  useEffect(() => {
+    loadComplaintDetails();
+  }, [loadComplaintDetails]);
+
+  // Real-time live room updates for this complaint
+  useComplaintDetailRealtime({
+    complaintId,
+    onRefresh: () => {
+      loadComplaintDetails();
+    },
+    onStatusUpdated: (update) => {
+      setComplaint((prev: any) => (prev ? { ...prev, status: update.status } : prev));
+      loadComplaintDetails();
+    },
+    onAssigned: () => {
+      loadComplaintDetails();
+    },
+  });
 
   const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,6 +419,9 @@ export default function CitizenComplaintDetailPage({
                             src={item.url}
                             alt={item.originalName || "Citizen Evidence"}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={() => {
+                              if (item.objectKey) refreshImageUrl(item.objectKey);
+                            }}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -451,6 +471,9 @@ export default function CitizenComplaintDetailPage({
                               src={item.url}
                               alt={item.originalName || "Officer Resolution Evidence"}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={() => {
+                                if (item.objectKey) refreshImageUrl(item.objectKey);
+                              }}
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-muted-foreground">

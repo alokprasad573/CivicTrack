@@ -16,7 +16,7 @@
     "dev": "npm run dev --workspace=@civictrack/server",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "lint": "npm run lint --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces"
   },
   "keywords": [

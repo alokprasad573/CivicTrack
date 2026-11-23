@@ -166,9 +166,6 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
                   ADMIN
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground hidden sm:block">
-                Review complaints, manage assignments, and track performance
-              </p>
             </div>
           </div>
 

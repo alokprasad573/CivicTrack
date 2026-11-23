@@ -1,0 +1,54 @@
+services:
+  mongodb:
+    image: mongo:7-jammy
+    container_name: civictrack-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: civictrack
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: civictrack-server
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: mongodb://mongodb:27017/civictrack
+      CLIENT_URL: http://localhost:3000
+      STAFF_JWT_ACCESS_SECRET: ${STAFF_JWT_ACCESS_SECRET:-civictrack_production_jwt_access_secret_32chars_min!}
+      STAFF_JWT_REFRESH_SECRET: ${STAFF_JWT_REFRESH_SECRET:-civictrack_production_jwt_refresh_secret_32chars_min!}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: civictrack-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      INTERNAL_API_URL: http://server:4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+    depends_on:
+      - server
+
+volumes:
+  mongo-data:

@@ -16,7 +16,7 @@ import { NotFoundError, ForbiddenError, ValidationError } from "../../common/err
 import { logger } from "../../common/utils/logger.js";
 import { IAuthUser } from "../identity/identity.types.js";
 import { NotificationService } from "../notifications/notification.service.js";
-import { emitComplaintStatusUpdated } from "../../socket.js";
+import { emitComplaintStatusUpdated, emitComplaintCreated } from "../../socket.js";
 
 export class ComplaintSubmissionService {
   /**
@@ -85,7 +85,6 @@ export class ComplaintSubmissionService {
       address: dto.address,
       landmark: dto.landmark,
       evidence: dto.evidence,
-      evidenceImages: dto.evidence,
       departmentId,
     };
 
@@ -136,12 +135,30 @@ export class ComplaintSubmissionService {
       resourceId: complaint._id.toString(),
     });
 
+    emitComplaintCreated({
+      complaintId: complaint._id.toString(),
+      referenceNumber,
+      title: complaint.title,
+      category: complaint.category,
+      status: complaint.status,
+      priority: complaint.priority,
+      citizenId,
+      address: complaint.address,
+      location: complaint.location,
+      departmentId: departmentId ? departmentId.toString() : undefined,
+      createdAt: complaint.createdAt,
+    });
+
     emitComplaintStatusUpdated({
       complaintId: complaint._id.toString(),
       referenceNumber,
       status: ComplaintStatus.SUBMITTED,
       citizenId,
       departmentId: departmentId ? departmentId.toString() : undefined,
+      title: complaint.title,
+      category: complaint.category,
+      priority: complaint.priority,
+      updatedAt: complaint.createdAt,
     });
 
     logger.info("Complaint created successfully", {

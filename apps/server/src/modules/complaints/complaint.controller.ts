@@ -140,7 +140,7 @@ export class ComplaintController {
 
       const complaintObj = complaint.toObject ? complaint.toObject() : { ...complaint };
       complaintObj.evidence = populatedEvidence;
-      complaintObj.evidenceImages = populatedEvidence;
+      
 
       const response: ApiResponse<any> = {
         success: true,
@@ -215,7 +215,6 @@ export class ComplaintController {
                 };
               })
             );
-            compObj.evidenceImages = compObj.evidence;
           }
 
           if (compObj.resolutionEvidence && compObj.resolutionEvidence.length > 0) {
@@ -294,7 +293,6 @@ export class ComplaintController {
 
       const complaintObj = result.complaint.toObject ? result.complaint.toObject() : { ...result.complaint };
       complaintObj.evidence = populatedEvidence;
-      complaintObj.evidenceImages = populatedEvidence;
 
       if (complaintObj.resolutionEvidence && complaintObj.resolutionEvidence.length > 0) {
         complaintObj.resolutionEvidence = await Promise.all(
@@ -572,20 +570,22 @@ export class ComplaintController {
 
       const bodyData = { ...req.body };
       let existingEvidence: any[] = [];
-      if (bodyData.evidence) {
-        if (typeof bodyData.evidence === "string") {
+      const rawEvidence = bodyData.evidence || bodyData.resolutionEvidence;
+      if (rawEvidence) {
+        if (typeof rawEvidence === "string") {
           try {
-            existingEvidence = JSON.parse(bodyData.evidence);
+            existingEvidence = JSON.parse(rawEvidence);
           } catch {
             existingEvidence = [];
           }
-        } else if (Array.isArray(bodyData.evidence)) {
-          existingEvidence = bodyData.evidence;
+        } else if (Array.isArray(rawEvidence)) {
+          existingEvidence = rawEvidence;
         }
       }
 
       const combinedEvidence = [...existingEvidence, ...multipartEvidence];
       bodyData.evidence = combinedEvidence;
+      bodyData.resolutionEvidence = combinedEvidence;
 
       const dto = ResolveComplaintSchema.parse(bodyData);
       const updated = await ComplaintService.resolve({

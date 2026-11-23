@@ -51,12 +51,9 @@ function OfficerShellContent({ children }: { children: React.ReactNode }) {
                     CivicTrack
                   </span>
                   <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                    Field Ops
+                    Field Officer
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground hidden sm:block">
-                  Field Investigation & On-Site Resolution
-                </p>
               </div>
             </Link>
           </div>
@@ -163,7 +160,7 @@ function OfficerShellContent({ children }: { children: React.ReactNode }) {
       {/* Desktop Footer */}
       <footer className="border-t border-border bg-card/50 py-4 text-xs text-muted-foreground mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
-          <p>© {new Date().getFullYear()} CivicTrack &bull; Municipal Field Operations</p>
+          <p>© {new Date().getFullYear()} CivicTrack &bull; Smart City Civic Issue Resolution Platform</p>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>GPS Navigation</span>
             <span>&bull;</span>

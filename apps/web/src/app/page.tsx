@@ -33,7 +33,7 @@ export default async function HomePage() {
                 CivicTrack
               </span>
               <span className="text-[10px] font-medium text-muted-foreground -mt-0.5">
-                City Issue Resolution System
+                Smart City Civic Issue Resolution Platform
               </span>
             </div>
           </Link>
@@ -336,7 +336,7 @@ export default async function HomePage() {
       <footer className="border-t border-border bg-card py-8">
         <div className="container mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8 text-xs text-muted-foreground">
           <p>
-            &copy; {new Date().getFullYear()} CivicTrack — Smart Civic Complaint Management System.
+            &copy; {new Date().getFullYear()} CivicTrack — Smart City Civic Issue Resolution Platform
           </p>
           <div className="flex items-center gap-4">
             <Link href="/citizen" className="hover:text-foreground">Citizen Portal</Link>

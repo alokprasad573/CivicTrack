@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useUser, useAuth } from "@clerk/nextjs";
 import {
@@ -12,6 +12,7 @@ import { CitizenShell } from "../../components/layout/citizen-shell";
 import { MapComplaintItem } from "../../hooks/use-complaint-markers";
 import { CATEGORY_COLORS } from "../../lib/ola-maps-config";
 import { StatusBadge } from "../../components/ui/status-badge";
+import { useRealtimeComplaints } from "../../hooks/use-realtime-complaints";
 
 const SpatialMapPreview = dynamic(
   () =>
@@ -55,51 +56,99 @@ export default function CitizenDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadCitizenComplaints() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const token = await getToken();
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        const res = await fetch("/api/v1/complaints?page=1&limit=8", {
-          headers,
-          credentials: "include",
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data) {
-            const list = Array.isArray(json.data)
-              ? json.data
-              : json.data.complaints || [];
-            setComplaints(list);
-          }
-        } else if (res.status === 401) {
-          setComplaints([]);
-        } else {
-          const errJson = await res.json().catch(() => null);
-          setError(
-            errJson?.error?.message ||
-            (res.status === 404
-              ? "API service unreachable. Please ensure the backend server is running on port 4000."
-              : `Failed to retrieve complaints (${res.status} ${res.statusText})`)
-          );
-        }
-      } catch (err: any) {
-        setError(err.message || "Failed to load dashboard data");
-      } finally {
-        setIsLoading(false);
+  const loadCitizenComplaints = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
       }
-    }
 
+      const res = await fetch("/api/v1/complaints?page=1&limit=8", {
+        headers,
+        credentials: "include",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const list = Array.isArray(json.data)
+            ? json.data
+            : json.data.complaints || [];
+          setComplaints(list);
+        }
+      } else if (res.status === 401) {
+        setComplaints([]);
+      } else {
+        const errJson = await res.json().catch(() => null);
+        setError(
+          errJson?.error?.message ||
+          (res.status === 404
+            ? "API service unreachable. Please ensure the backend server is running on port 4000."
+            : `Failed to retrieve complaints (${res.status} ${res.statusText})`)
+        );
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to load dashboard data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
     if (isAuthLoaded) {
       loadCitizenComplaints();
     }
-  }, [isAuthLoaded, getToken]);
+  }, [isAuthLoaded, loadCitizenComplaints]);
+
+  // Real-time live status and assignment updates for citizen reports
+  useRealtimeComplaints({
+    onCreated: (newComplaint) => {
+      setComplaints((prev) => {
+        const id = newComplaint.complaintId;
+        if (prev.some((c) => (c._id || c.id) === id)) return prev;
+        return [
+          {
+            _id: id,
+            id,
+            referenceNumber: newComplaint.referenceNumber,
+            title: newComplaint.title,
+            category: newComplaint.category,
+            status: newComplaint.status,
+            priority: newComplaint.priority,
+            location: newComplaint.location,
+            address: newComplaint.address,
+            departmentId: newComplaint.departmentId,
+            createdAt: newComplaint.createdAt,
+            evidence: [],
+          },
+          ...prev,
+        ];
+      });
+    },
+    onStatusUpdated: (update) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === update.complaintId
+            ? { ...c, status: update.status }
+            : c
+        )
+      );
+    },
+    onAssigned: (assignment) => {
+      setComplaints((prev) =>
+        prev.map((c) =>
+          (c._id || c.id) === assignment.complaintId
+            ? { ...c, status: ComplaintStatus.ASSIGNED, departmentId: assignment.departmentId }
+            : c
+        )
+      );
+    },
+    onReconnect: () => {
+      loadCitizenComplaints();
+    },
+  });
 
   // Load nearby public issues for spatial map enrichment
   useEffect(() => {

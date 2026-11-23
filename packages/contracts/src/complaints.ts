@@ -87,6 +87,7 @@ export type StartWorkDto = z.infer<typeof StartWorkSchema>;
 export const ResolveComplaintSchema = z.object({
   remarks: z.string().trim().min(10, "Resolution remarks must be at least 10 characters").max(2000),
   evidence: z.array(EvidenceItemSchema).max(5).default([]),
+  resolutionEvidence: z.array(EvidenceItemSchema).max(5).optional(),
 });
 
 export type ResolveComplaintDto = z.infer<typeof ResolveComplaintSchema>;
