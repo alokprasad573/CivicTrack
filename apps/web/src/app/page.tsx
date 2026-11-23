@@ -91,7 +91,7 @@ export default async function HomePage() {
               <div className="lg:col-span-7 space-y-6">
                 <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider shadow-xs">
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Connecting Neighbors & City Services</span>
+                  <span>Bridging Citizens & Municipal Governance</span>
                 </div>
 
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-[1.15] tracking-tight">
@@ -141,7 +141,7 @@ export default async function HomePage() {
 
               {/* Right Column: Signature Card */}
               <div className="lg:col-span-5 relative">
-                <div className="relative bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 lg:p-10 shadow-2xl shadow-primary/20 text-white">
+                <div className="relative bg-blue-600 rounded-3xl p-8 lg:p-10 shadow-2xl shadow-primary/20 text-white shadow-lg shadow-blue-500/25">
                   <div className="relative z-10 space-y-6">
                     <div className="flex items-center justify-between border-b border-white/20 pb-4">
                       <div className="flex items-center gap-2">
