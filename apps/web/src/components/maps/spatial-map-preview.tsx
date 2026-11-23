@@ -138,7 +138,7 @@ export function SpatialMapPreview({
                 <span className="text-xs font-bold text-foreground">{title}</span>
               </div>
               {validCount > 0 && (
-                <p className="text-[10px] px-1.5 py-0.2 rounded font-mono font-bold text-primary">
+                <p className="text-[10px] px-1.5 py-0.2 rounded font-bold text-primary">
                   {validCount > 1 ? `${validCount} Issues` : "1 Issue"}
                 </p>
               )}
@@ -190,7 +190,7 @@ export function SpatialMapPreview({
           <div className="bg-card/95 backdrop-blur-md border border-primary/40 rounded-xl p-3 shadow-2xl flex flex-col gap-2 ring-1 ring-primary/20">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-primary">
+                <span className="text-xs font-bold text-primary">
                   {selectedComplaint.referenceNumber}
                 </span>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded border capitalize bg-secondary text-foreground border-border">

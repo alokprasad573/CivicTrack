@@ -1,0 +1,43 @@
+name: CivicTrack Production Release Gate CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  verify:
+    name: Typecheck, Test & Production Build
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install Monorepo Dependencies
+        run: npm ci
+
+      - name: Workspace Typecheck Gate
+        run: npm run typecheck --workspaces
+
+      - name: Deterministic Backend Security & Domain Tests
+        run: npm test --workspace=@civictrack/server
+        env:
+          NODE_ENV: test
+          STAFF_JWT_ACCESS_SECRET: test_jwt_access_secret_deterministic_testing_32char_key!
+          STAFF_JWT_REFRESH_SECRET: test_jwt_refresh_secret_deterministic_testing_32char_key!
+          ENABLE_TEST_RATE_LIMIT: "false"
+
+      - name: Monorepo Production Build Gate
+        run: npm run build --workspaces

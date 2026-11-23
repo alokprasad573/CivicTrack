@@ -22,7 +22,12 @@ export function useNotifications() {
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    if (!isSignedIn) {
+    const isStaffPortal =
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/officer")) &&
+      !window.location.pathname.includes("/login");
+
+    if (!isSignedIn && !isStaffPortal) {
       setNotifications([]);
       setUnreadCount(0);
       setIsLoading(false);
@@ -30,8 +35,7 @@ export function useNotifications() {
     }
 
     try {
-      const token = await getToken();
-      if (!token) return;
+      const token = !isStaffPortal ? (await getToken()) || undefined : undefined;
 
       const data = await apiClient<NotificationListResponse>("notifications?limit=20", {
         token,
@@ -47,9 +51,14 @@ export function useNotifications() {
   }, [getToken, isSignedIn]);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    const isStaffPortal =
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/officer")) &&
+      !window.location.pathname.includes("/login");
+
+    if ((isLoaded && isSignedIn) || isStaffPortal) {
       fetchNotifications();
-    } else if (isLoaded && !isSignedIn) {
+    } else if (isLoaded && !isSignedIn && !isStaffPortal) {
       setIsLoading(false);
     }
   }, [isLoaded, isSignedIn, fetchNotifications]);
@@ -57,8 +66,14 @@ export function useNotifications() {
   // Handle incoming real-time socket notifications
   useEffect(() => {
     const unsubscribe = on(SocketEvent.NOTIFICATION_NEW, (newNotif: INotification) => {
-      setNotifications((prev) => [newNotif, ...prev.filter((n) => n._id !== newNotif._id)]);
-      setUnreadCount((prev) => prev + 1);
+      setNotifications((prev) => {
+        const alreadyExists = prev.some((n) => n._id === newNotif._id);
+        if (!alreadyExists) {
+          setUnreadCount((count) => count + 1);
+          return [newNotif, ...prev];
+        }
+        return prev;
+      });
 
       // Trigger floating toast notification
       setToastNotification(newNotif);
@@ -97,13 +112,16 @@ export function useNotifications() {
       setUnreadCount((prev) => Math.max(0, prev - 1));
 
       try {
-        const token = await getToken();
-        if (token) {
-          await apiClient<INotification>(`notifications/${notificationId}/read`, {
-            method: "PATCH",
-            token,
-          });
-        }
+        const isStaffPortal =
+          typeof window !== "undefined" &&
+          (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/officer")) &&
+          !window.location.pathname.includes("/login");
+        const token = !isStaffPortal ? (await getToken()) || undefined : undefined;
+
+        await apiClient<INotification>(`notifications/${notificationId}/read`, {
+          method: "PATCH",
+          token,
+        });
       } catch (err) {
         console.error("Failed to mark notification as read:", err);
         // Rollback on failure
@@ -121,13 +139,16 @@ export function useNotifications() {
     setUnreadCount(0);
 
     try {
-      const token = await getToken();
-      if (token) {
-        await apiClient<{ modifiedCount: number }>("notifications/read-all", {
-          method: "POST",
-          token,
-        });
-      }
+      const isStaffPortal =
+        typeof window !== "undefined" &&
+        (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/officer")) &&
+        !window.location.pathname.includes("/login");
+      const token = !isStaffPortal ? (await getToken()) || undefined : undefined;
+
+      await apiClient<{ modifiedCount: number }>("notifications/read-all", {
+        method: "POST",
+        token,
+      });
     } catch (err) {
       console.error("Failed to mark all notifications read:", err);
       fetchNotifications();
@@ -143,6 +164,7 @@ export function useNotifications() {
     dismissToast,
     markAsRead,
     markAllAsRead,
+    refetch: fetchNotifications,
     refresh: fetchNotifications,
   };
 }

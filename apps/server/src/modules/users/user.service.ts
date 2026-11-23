@@ -1,8 +1,12 @@
 import { Types } from "mongoose";
+import bcrypt from "bcryptjs";
 import { UserModel, IUserDocument } from "./user.model.js";
+import { DepartmentModel } from "../departments/department.model.js";
+import { StaffSessionModel } from "../staff-auth/staff-session.model.js";
 import { UserRole } from "@civictrack/contracts";
-import { NotFoundError } from "../../common/errors/app-error.js";
+import { NotFoundError, ValidationError, ForbiddenError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
+import { disconnectUserSockets } from "../../socket.js";
 
 export interface CreateOrUpdateClerkUserDto {
   clerkUserId: string;
@@ -96,27 +100,37 @@ export class UserService {
   }
 
   /**
-   * Bootstrap an initial admin user safely
+   * Bootstrap an initial admin user safely with credentials
    */
-  public static async bootstrapAdmin(email: string, name?: string): Promise<IUserDocument> {
+  public static async bootstrapAdmin(email: string, name?: string, password?: string): Promise<IUserDocument> {
     const normalizedEmail = email.toLowerCase().trim();
-    let user = await UserModel.findOne({ email: normalizedEmail });
+    let user = await UserModel.findOne({ email: normalizedEmail }).select("+passwordHash");
+
+    let passwordHash: string | undefined;
+    if (password) {
+      if (password.length < 8) {
+        throw new ValidationError("Initial admin password must be at least 8 characters");
+      }
+      passwordHash = await bcrypt.hash(password, 10);
+    }
 
     if (user) {
       user.role = UserRole.ADMIN;
       user.isActive = true;
       if (name) user.name = name;
+      if (passwordHash) user.passwordHash = passwordHash;
       await user.save();
       logger.info("Promoted existing user to ADMIN", { email: normalizedEmail, id: user._id.toString() });
       return user;
     }
 
-    // Create admin user shell (will map clerkUserId when user signs in or provides it)
+    // Create admin user with staff credentials
     user = await UserModel.create({
       clerkUserId: `bootstrapped_${Date.now()}`,
       email: normalizedEmail,
       name: name || "System Administrator",
       role: UserRole.ADMIN,
+      passwordHash: passwordHash || (await bcrypt.hash("Admin@123456", 10)),
       isActive: true,
     });
 
@@ -125,13 +139,15 @@ export class UserService {
   }
 
   /**
-   * List users with pagination and filtering for admins
+   * List users with pagination and filtering for admins and officers.
+   * Excludes sensitive authentication hashes or third-party identities.
    */
   public static async listUsers(options: {
     page?: number;
     limit?: number;
     role?: UserRole;
     search?: string;
+    departmentId?: string;
   }): Promise<{ users: IUserDocument[]; total: number; page: number; limit: number; totalPages: number }> {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
@@ -141,13 +157,27 @@ export class UserService {
     if (options.role) {
       query.role = options.role;
     }
+    if (options.departmentId) {
+      if (!Types.ObjectId.isValid(options.departmentId)) {
+        throw new ValidationError("Invalid department ID format");
+      }
+      query.departmentId = new Types.ObjectId(options.departmentId);
+    }
     if (options.search) {
-      const searchRegex = new RegExp(options.search, "i");
-      query.$or = [{ name: searchRegex }, { email: searchRegex }];
+      // Escape regex metacharacters to prevent ReDoS injection
+      const sanitized = options.search.trim().slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (sanitized.length > 0) {
+        const searchRegex = new RegExp(sanitized, "i");
+        query.$or = [{ name: searchRegex }, { email: searchRegex }];
+      }
     }
 
     const [users, total] = await Promise.all([
-      UserModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      UserModel.find(query)
+        .select("_id name email role departmentId isActive createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
       UserModel.countDocuments(query),
     ]);
 
@@ -161,7 +191,8 @@ export class UserService {
   }
 
   /**
-   * Admin updates user role and optionally binds to a municipal department
+   * Admin updates user role and optionally binds to a municipal department.
+   * Enforces role integrity, last-admin protection, and instant session revocation.
    */
   public static async updateRoleAndDepartment(params: {
     userId: string;
@@ -176,14 +207,45 @@ export class UserService {
       throw new NotFoundError("User not found");
     }
 
-    user.role = params.role;
-    if (params.role === UserRole.OFFICER && params.departmentId) {
-      user.departmentId = new Types.ObjectId(params.departmentId);
-    } else if (params.role !== UserRole.OFFICER) {
+    // Last-admin protection: cannot demote the only remaining active admin
+    if (user.role === UserRole.ADMIN && params.role !== UserRole.ADMIN) {
+      const otherAdmins = await UserModel.countDocuments({
+        role: UserRole.ADMIN,
+        isActive: true,
+        _id: { $ne: user._id },
+      });
+      if (otherAdmins === 0) {
+        throw new ForbiddenError("Cannot demote the last remaining active administrator.");
+      }
+    }
+
+    // Department validation for OFFICER role
+    if (params.role === UserRole.OFFICER) {
+      if (!params.departmentId || !Types.ObjectId.isValid(params.departmentId)) {
+        throw new ValidationError("A valid department is required when assigning the Field Officer role.");
+      }
+      const dept = await DepartmentModel.findById(params.departmentId);
+      if (!dept || !dept.isActive) {
+        throw new ValidationError("Selected department does not exist or is inactive.");
+      }
+      user.departmentId = dept._id;
+    } else {
       user.departmentId = undefined;
     }
 
+    const previousRole = user.role;
+    user.role = params.role;
     await user.save();
+
+    // Revoke all active staff sessions if role changed
+    if (previousRole !== params.role && StaffSessionModel.db.readyState === 1) {
+      await StaffSessionModel.updateMany(
+        { userId: user._id, isRevoked: false },
+        { $set: { isRevoked: true, revokedAt: new Date() } }
+      );
+      disconnectUserSockets(user._id.toString());
+    }
+
     logger.info("Updated user role and department", {
       userId: user._id.toString(),
       role: user.role,

@@ -4,6 +4,8 @@ import { authenticateUser } from "../identity/clerk.middleware.js";
 import { requireRole } from "../identity/rbac.middleware.js";
 import { UserRole, ApiResponse, ComplaintCategory } from "@civictrack/contracts";
 import { z } from "zod";
+import { Types } from "mongoose";
+import { ValidationError } from "../../common/errors/app-error.js";
 import { IDepartmentDocument } from "./department.model.js";
 
 const router = Router();
@@ -58,17 +60,36 @@ router.post(
  * GET /api/v1/departments/:id/officers
  * Returns officers belonging to the specified department
  */
-router.get("/:id/officers", authenticateUser, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const officers = await DepartmentService.listOfficers(req.params.id as string);
-    const response: ApiResponse<any[]> = {
-      success: true,
-      data: officers,
-    };
-    res.status(200).json(response);
-  } catch (error) {
-    next(error);
+router.get(
+  "/:id/officers",
+  authenticateUser,
+  requireRole(UserRole.ADMIN, UserRole.OFFICER),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const departmentId = req.params.id as string;
+      if (!Types.ObjectId.isValid(departmentId)) {
+        throw new ValidationError("Invalid department ID format");
+      }
+      if (req.user!.role === UserRole.OFFICER && req.user!.departmentId !== departmentId) {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Officers are only authorized to view officers within their assigned department.",
+          },
+        });
+        return;
+      }
+      const officers = await DepartmentService.listOfficers(departmentId);
+      const response: ApiResponse<any[]> = {
+        success: true,
+        data: officers,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export const departmentRoutes = router;

@@ -3,6 +3,7 @@ import { ComplaintModel, IComplaintDocument } from "./complaint.model.js";
 import { ComplaintStatusHistoryModel } from "./complaint-history.model.js";
 import { DepartmentService } from "../departments/department.service.js";
 import { StorageService } from "../storage/storage.service.js";
+import { S3Service } from "../storage/s3.service.js";
 import { UserModel } from "../users/user.model.js";
 import { ComplaintQueryService } from "./complaint-query.service.js";
 import {
@@ -13,6 +14,7 @@ import {
   AssignComplaintDto,
   StartWorkDto,
   ResolveComplaintDto,
+  CloseComplaintDto,
   UserRole,
   NotificationType,
   isValidStatusTransition,
@@ -469,12 +471,41 @@ export class ComplaintWorkflowService {
 
     // If evidence was provided, link in storage
     if (dto.evidence && dto.evidence.length > 0) {
+      const keys = dto.evidence.map((e) => e.objectKey);
+      await StorageService.validateUploadIntents({
+        objectKeys: keys,
+        userId: user.id,
+      });
       await StorageService.markEvidenceAttached({
-        objectKeys: dto.evidence.map((e) => e.objectKey),
+        objectKeys: keys,
         complaintId: complaint._id,
         userId: user.id,
       });
     }
+
+    // Populate pre-signed S3 URL so that the URL is stored directly in DB
+    const resolvedEvidenceWithUrls = await Promise.all(
+      (dto.evidence || []).map(async (item) => {
+        const key = item.objectKey || item.key;
+        let url = item.url;
+        if (!url && key) {
+          try {
+            url = await S3Service.generatePresignedViewUrl(key);
+          } catch {
+            url = item.url || "";
+          }
+        }
+        return {
+          objectKey: key,
+          key,
+          contentType: item.contentType,
+          size: item.size,
+          url,
+          originalName: item.originalName || "Officer Resolution Proof",
+          uploadedAt: item.uploadedAt || new Date(),
+        };
+      })
+    );
 
     const updated = await ComplaintModel.findOneAndUpdate(
       { _id: complaint._id, status: complaint.status },
@@ -483,7 +514,7 @@ export class ComplaintWorkflowService {
           status: ComplaintStatus.RESOLVED,
           resolvedAt: new Date(),
           resolutionRemarks: dto.remarks,
-          resolutionEvidence: dto.evidence || [],
+          resolutionEvidence: resolvedEvidenceWithUrls,
         },
       },
       { new: true }
@@ -499,17 +530,24 @@ export class ComplaintWorkflowService {
       toStatus: ComplaintStatus.RESOLVED,
       actorId: new Types.ObjectId(user.id),
       remarks: dto.remarks,
-      evidence: dto.evidence || [],
+      evidence: resolvedEvidenceWithUrls,
     });
 
-    await NotificationService.createAndEmit({
-      recipientId: complaint.citizenId.toString(),
-      type: NotificationType.COMPLAINT_RESOLVED,
-      title: "Complaint Resolved",
-      message: `Your complaint (${complaint.referenceNumber}) has been resolved by municipal field officers. Please review the resolution and submit your feedback.`,
-      resourceType: "COMPLAINT",
-      resourceId: complaint._id.toString(),
-    });
+    try {
+      await NotificationService.createAndEmit({
+        recipientId: complaint.citizenId.toString(),
+        type: NotificationType.COMPLAINT_RESOLVED,
+        title: "Complaint Resolved",
+        message: `Your complaint (${complaint.referenceNumber}) has been resolved by municipal field officers. Please review the resolution and submit your feedback.`,
+        resourceType: "COMPLAINT",
+        resourceId: complaint._id.toString(),
+      });
+    } catch (notifErr) {
+      logger.warn("Notification delivery failed, workflow completed safely", {
+        complaintId: complaint._id.toString(),
+        error: notifErr instanceof Error ? notifErr.message : String(notifErr),
+      });
+    }
 
     emitComplaintStatusUpdated({
       complaintId: complaint._id.toString(),
@@ -524,6 +562,95 @@ export class ComplaintWorkflowService {
       id: complaint._id.toString(),
       officerId: user.id,
       hasEvidence: Boolean(dto.evidence?.length),
+    });
+
+    return updated;
+  }
+
+  /**
+   * Admin formally closes complaint: VERIFIED/ASSIGNED/IN_PROGRESS/RESOLVED -> CLOSED
+   */
+  public static async close(params: {
+    idOrRef: string;
+    user: IAuthUser;
+    dto: CloseComplaintDto;
+  }): Promise<IComplaintDocument> {
+    const { idOrRef, user, dto } = params;
+
+    if (user.role !== UserRole.ADMIN) {
+      throw new ForbiddenError("Only municipal administrators can formally close complaints.");
+    }
+
+    const complaint = await ComplaintQueryService.findComplaint(idOrRef);
+
+    if (!isValidStatusTransition(complaint.status, ComplaintStatus.CLOSED)) {
+      throw new ValidationError(
+        `Cannot close complaint in '${complaint.status}' status. Current status does not permit closing.`
+      );
+    }
+
+    const updated = await ComplaintModel.findOneAndUpdate(
+      { _id: complaint._id, status: complaint.status },
+      {
+        $set: {
+          status: ComplaintStatus.CLOSED,
+          closedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      throw new ConflictError("Complaint was modified concurrently. Please refresh.");
+    }
+
+    await ComplaintStatusHistoryModel.create({
+      complaintId: complaint._id,
+      fromStatus: complaint.status,
+      toStatus: ComplaintStatus.CLOSED,
+      actorId: new Types.ObjectId(user.id),
+      remarks: dto.remarks || "Municipal administrator formally closed the complaint.",
+    });
+
+    try {
+      await NotificationService.createAndEmit({
+        recipientId: complaint.citizenId.toString(),
+        type: NotificationType.COMPLAINT_CLOSED,
+        title: "Complaint Closed",
+        message: `Your complaint (${complaint.referenceNumber}) has been formally closed by municipal administration.`,
+        resourceType: "COMPLAINT",
+        resourceId: complaint._id.toString(),
+      });
+
+      if (complaint.assignedOfficerId) {
+        await NotificationService.createAndEmit({
+          recipientId: complaint.assignedOfficerId.toString(),
+          type: NotificationType.COMPLAINT_CLOSED,
+          title: "Complaint Closed",
+          message: `Complaint ${complaint.referenceNumber} has been formally closed by municipal administration.`,
+          resourceType: "COMPLAINT",
+          resourceId: complaint._id.toString(),
+        });
+      }
+    } catch (notifErr) {
+      logger.warn("Notification delivery failed on close, continuing", {
+        complaintId: complaint._id.toString(),
+        error: notifErr instanceof Error ? notifErr.message : String(notifErr),
+      });
+    }
+
+    emitComplaintStatusUpdated({
+      complaintId: complaint._id.toString(),
+      referenceNumber: complaint.referenceNumber,
+      status: ComplaintStatus.CLOSED,
+      citizenId: complaint.citizenId.toString(),
+      departmentId: complaint.departmentId ? complaint.departmentId.toString() : undefined,
+      assignedOfficerId: complaint.assignedOfficerId ? complaint.assignedOfficerId.toString() : undefined,
+    });
+
+    logger.info("Complaint formally CLOSED by admin", {
+      id: complaint._id.toString(),
+      adminId: user.id,
     });
 
     return updated;

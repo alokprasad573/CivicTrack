@@ -76,15 +76,23 @@ export class SlaService {
       });
 
       if (!existingEscalation) {
-        // Create new escalation log
-        await SlaEscalationModel.create({
-          complaintId: complaint._id,
-          dueAt: complaint.dueAt,
-          escalatedAt: now,
-          delayHours,
-          isResolved: false,
-          notifiedAdminsCount: admins.length,
-        });
+        // Create new escalation log (handling unique index race condition across instances)
+        try {
+          await SlaEscalationModel.create({
+            complaintId: complaint._id,
+            dueAt: complaint.dueAt,
+            escalatedAt: now,
+            delayHours,
+            isResolved: false,
+            notifiedAdminsCount: admins.length,
+          });
+        } catch (err: any) {
+          if (err?.code === 11000) {
+            // Concurrently escalated by another worker instance; proceed safely
+            continue;
+          }
+          throw err;
+        }
 
         escalatedCount++;
 
@@ -92,7 +100,7 @@ export class SlaService {
         for (const admin of admins) {
           await NotificationService.createAndEmit({
             recipientId: admin._id.toString(),
-            type: NotificationType.COMPLAINT_IN_PROGRESS,
+            type: NotificationType.SLA_BREACH,
             title: `SLA Breach: ${complaint.referenceNumber}`,
             message: `Complaint "${complaint.title}" is ${delayHours}h overdue. Priority: ${complaint.priority}. Immediate supervisor review required.`,
             resourceType: "COMPLAINT",
@@ -109,7 +117,7 @@ export class SlaService {
 
           await NotificationService.createAndEmit({
             recipientId: officerId,
-            type: NotificationType.COMPLAINT_IN_PROGRESS,
+            type: NotificationType.SLA_BREACH,
             title: `SLA Overdue: ${complaint.referenceNumber}`,
             message: `Your assigned incident is ${delayHours}h overdue. Please resolve or update status.`,
             resourceType: "COMPLAINT",

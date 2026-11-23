@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ThemeProvider } from "../components/theme/theme-context";
+import { ToastProvider } from "../components/ui/toast-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,26 +18,42 @@ export default function RootLayout({
     <ClerkProvider
       appearance={{
         variables: {
-          colorPrimary: "hsl(13, 67%, 54%)", // Terracotta #D95D39
-          colorBackground: "hsl(150, 8%, 10%)", // Forest charcoal
-          colorForeground: "hsl(38, 23%, 93%)",
-          colorMutedForeground: "hsl(150, 4%, 65%)",
-          colorDanger: "hsl(0, 68%, 52%)",
+          colorPrimary: "#2563EB", // PolicyOracle Blue
+          colorBackground: "#FFFFFF", // Pure white card
+          colorForeground: "#0F172A", // Dark slate
+          colorMutedForeground: "#64748B", // Slate gray
+          colorDanger: "#EF4444", // Red error
           borderRadius: "0.75rem",
         },
         elements: {
-          card: "bg-card border border-border shadow-xl rounded-2xl",
-          headerTitle: "text-foreground font-semibold",
-          headerSubtitle: "text-muted-foreground",
+          card: "bg-white border border-slate-200 shadow-xl shadow-blue-500/5 rounded-2xl",
+          headerTitle: "text-slate-900 font-bold text-xl tracking-tight",
+          headerSubtitle: "text-slate-500 text-sm",
           formButtonPrimary:
-            "bg-primary hover:bg-[#c34e2c] text-white font-semibold transition rounded-xl",
-          footerActionLink: "text-primary hover:text-[#c34e2c] font-medium",
+            "bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-md shadow-blue-500/20 active:scale-[0.98]",
+          footerActionLink: "text-blue-600 hover:text-blue-700 font-semibold",
+          formFieldInput:
+            "rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-slate-800",
         },
       }}
     >
-      <html lang="en" className="dark" suppressHydrationWarning>
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                try {
+                  localStorage.removeItem("civictrack-theme");
+                  document.documentElement.classList.remove("dark");
+                } catch (_) {}
+              `,
+            }}
+          />
+        </head>
         <body className="min-h-screen bg-background font-sans antialiased text-foreground">
-          <ThemeProvider>{children}</ThemeProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </body>
       </html>
     </ClerkProvider>

@@ -9,19 +9,19 @@ export const PRIORITY_META: Record<
 > = {
   [ComplaintPriority.CRITICAL]: {
     label: "Critical",
-    badge: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
+    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
   },
   [ComplaintPriority.HIGH]: {
     label: "High",
-    badge: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
+    badge: "bg-amber-50 text-amber-700 border-amber-200/80",
   },
   [ComplaintPriority.MEDIUM]: {
     label: "Medium",
-    badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+    badge: "bg-blue-50 text-blue-700 border-blue-200/80",
   },
   [ComplaintPriority.LOW]: {
     label: "Low",
-    badge: "bg-stone-500/15 text-stone-600 dark:text-stone-400 border-stone-500/30",
+    badge: "bg-slate-100 text-slate-600 border-slate-200/80",
   },
 };
 
@@ -35,12 +35,12 @@ export function PriorityBadge({
   const safePriority = typeof priority === "string" ? priority.toUpperCase() : ComplaintPriority.MEDIUM;
   const meta = PRIORITY_META[safePriority] || {
     label: typeof priority === "string" && priority.length > 0 ? priority.replace(/_/g, " ") : "Medium",
-    badge: "bg-stone-500/15 text-stone-400 border-stone-500/30",
+    badge: "bg-slate-100 text-slate-600 border-slate-200/80",
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold tracking-wide uppercase border ${meta.badge} ${className}`}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold tracking-wide uppercase border ${meta.badge} ${className}`}
     >
       {meta.label}
     </span>

@@ -29,7 +29,19 @@ export const openApiSpec = {
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
-        description: "Clerk-issued authenticated session JWT bearer token.",
+        description: "Clerk-issued authenticated session JWT bearer token for citizen endpoints.",
+      },
+      StaffCookieAuth: {
+        type: "apiKey",
+        in: "cookie",
+        name: "civictrack_staff_access",
+        description: "HttpOnly JWT session cookie for Admin and Field Officer staff authentication.",
+      },
+      StaffBearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description: "Staff JWT bearer token for Admin and Officer operations.",
       },
       SvixAuth: {
         type: "apiKey",
@@ -89,13 +101,12 @@ export const openApiSpec = {
       ComplaintCategory: {
         type: "string",
         enum: [
-          "POTHOLE",
-          "STREETLIGHT",
-          "GARBAGE",
-          "WATER_LEAKAGE",
-          "DRAINAGE",
-          "ILLEGAL_PARKING",
-          "TREE_FALLEN",
+          "ROADS_POTHOLES",
+          "WATER_SUPPLY",
+          "GARBAGE_SANITATION",
+          "DRAINAGE_SEWAGE",
+          "STREETLIGHTS",
+          "ELECTRICITY",
           "OTHER",
         ],
       },
@@ -196,14 +207,15 @@ export const openApiSpec = {
     "/complaints/nearby": {
       get: {
         summary: "Find nearby complaints",
-        description: "Geospatial $near spherical query for reports within radius.",
+        description: "Geospatial $near spherical query for reports within radius. Returns strict public allowlist DTO.",
         parameters: [
           { name: "lng", in: "query", required: true, schema: { type: "number" } },
           { name: "lat", in: "query", required: true, schema: { type: "number" } },
-          { name: "maxDistance", in: "query", schema: { type: "number", default: 5000 } },
+          { name: "radius", in: "query", schema: { type: "number", default: 10000 } },
+          { name: "category", in: "query", schema: { $ref: "#/components/schemas/ComplaintCategory" } },
         ],
         responses: {
-          "200": { description: "List of nearby complaints" },
+          "200": { description: "List of nearby complaints (public allowlist fields only)" },
         },
       },
     },
@@ -222,7 +234,7 @@ export const openApiSpec = {
       post: {
         summary: "Request AWS S3 pre-signed upload intents",
         description: "Generates secure pre-signed PUT URLs for JPEG/PNG/WebP attachments.",
-        security: [{ BearerAuth: [] }],
+        security: [{ BearerAuth: [] }, { StaffCookieAuth: [] }, { StaffBearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -235,11 +247,12 @@ export const openApiSpec = {
                     type: "array",
                     items: {
                       type: "object",
-                      required: ["fileName", "fileType", "fileSize"],
+                      required: ["filename", "contentType", "size"],
                       properties: {
-                        fileName: { type: "string" },
-                        fileType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
-                        fileSize: { type: "integer", maximum: 10485760 },
+                        filename: { type: "string" },
+                        contentType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
+                        size: { type: "integer", maximum: 10485760 },
+                        checksum: { type: "string" },
                       },
                     },
                   },
@@ -249,7 +262,7 @@ export const openApiSpec = {
           },
         },
         responses: {
-          "200": { description: "Pre-signed PUT URLs and object keys" },
+          "201": { description: "Pre-signed PUT URLs, headers, and object keys" },
           "400": { description: "Validation error or invalid file type" },
         },
       },
@@ -319,7 +332,7 @@ export const openApiSpec = {
       post: {
         summary: "Link complaint as duplicate of parent incident",
         description: "Advisory administrative linking preserving citizen records.",
-        security: [{ BearerAuth: [] }],
+        security: [{ BearerAuth: [] }, { StaffCookieAuth: [] }, { StaffBearerAuth: [] }],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         requestBody: {
           required: true,
@@ -327,11 +340,10 @@ export const openApiSpec = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["originalComplaintId"],
+                required: ["duplicateOfId"],
                 properties: {
-                  originalComplaintId: { type: "string" },
-                  reason: { type: "string" },
-                  notes: { type: "string" },
+                  duplicateOfId: { type: "string" },
+                  remarks: { type: "string", maxLength: 500 },
                 },
               },
             },
@@ -351,6 +363,59 @@ export const openApiSpec = {
           "200": { description: "Audit summary of scanned and escalated complaints" },
           "401": { description: "Unauthorized" },
           "403": { description: "Requires Admin role" },
+        },
+      },
+    },
+    "/admin/invitations": {
+      post: {
+        summary: "Create a new staff invitation",
+        description: "Admin creates a single-use cryptographically secure invitation for an Officer or Admin.",
+        security: [{ StaffCookieAuth: [] }, { StaffBearerAuth: [] }],
+        responses: {
+          "201": { description: "Invitation created with secure single-use token" },
+          "400": { description: "Validation error" },
+          "403": { description: "Requires Admin role" },
+        },
+      },
+      get: {
+        summary: "List staff invitations",
+        description: "Admin lists pending, accepted, or revoked staff invitations.",
+        security: [{ StaffCookieAuth: [] }, { StaffBearerAuth: [] }],
+        responses: {
+          "200": { description: "List of invitations" },
+          "403": { description: "Requires Admin role" },
+        },
+      },
+    },
+    "/admin/invitations/{id}/revoke": {
+      post: {
+        summary: "Revoke a staff invitation",
+        description: "Admin revokes a pending staff invitation.",
+        security: [{ StaffCookieAuth: [] }, { StaffBearerAuth: [] }],
+        responses: {
+          "200": { description: "Invitation revoked successfully" },
+          "404": { description: "Invitation not found" },
+        },
+      },
+    },
+    "/staff/invitations/verify": {
+      get: {
+        summary: "Verify invitation token",
+        description: "Public endpoint to preview role and department details for a valid invitation token.",
+        responses: {
+          "200": { description: "Token is valid and returns preview details" },
+          "400": { description: "Invalid, expired, or already-used token" },
+        },
+      },
+    },
+    "/staff/invitations/accept": {
+      post: {
+        summary: "Accept invitation and register staff account",
+        description: "Public onboarding endpoint. Consumes single-use token atomically and provisions staff account with server-derived role and department.",
+        responses: {
+          "201": { description: "Staff account created and session established" },
+          "400": { description: "Validation or password requirements failed" },
+          "409": { description: "Token already consumed or email conflict" },
         },
       },
     },

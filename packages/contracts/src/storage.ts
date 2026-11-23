@@ -44,6 +44,8 @@ export const CreateUploadIntentSchema = z.object({
     .array(UploadIntentFileSchema)
     .min(1, "At least one file must be declared")
     .max(MAX_EVIDENCE_COUNT, `Maximum of ${MAX_EVIDENCE_COUNT} files allowed per request`),
+  folder: z.string().optional(),
+  complaintId: z.string().optional(),
 });
 
 export type CreateUploadIntentDto = z.infer<typeof CreateUploadIntentSchema>;

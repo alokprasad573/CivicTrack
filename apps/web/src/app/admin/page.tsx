@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ComplaintCategory,
@@ -8,11 +8,11 @@ import {
   ComplaintStatus,
 } from "@civictrack/contracts";
 import dynamic from "next/dynamic";
-import { AdminShell } from "../../components/layout/admin-shell";
 import { MapComplaintItem } from "../../hooks/use-complaint-markers";
 import { STATUS_COLORS, CATEGORY_COLORS } from "../../lib/ola-maps-config";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { PriorityBadge } from "../../components/ui/priority-badge";
+import { useToast } from "../../components/ui/toast-context";
 
 const SpatialMapPreview = dynamic(
   () =>
@@ -55,13 +55,17 @@ import {
   Map,
   Camera,
   ImageIcon,
+  EyeOff,
+  Info,
 } from "lucide-react";
 import { EvidenceLightbox, EvidenceImageItem } from "../../components/evidence/evidence-lightbox";
 
 export default function AdminTriagePage() {
+  const { toast } = useToast();
   const [complaints, setComplaints] = useState<any[]>([]);
   const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [showClosedOnMap, setShowClosedOnMap] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -82,7 +86,7 @@ export default function AdminTriagePage() {
 
   // Active modal state
   const [selectedComplaint, setSelectedComplaint] = useState<any | null>(null);
-  const [modalType, setModalType] = useState<"VERIFY" | "REJECT" | "ASSIGN" | "DUPLICATES" | null>(null);
+  const [modalType, setModalType] = useState<"VERIFY" | "REJECT" | "ASSIGN" | "DUPLICATES" | "CLOSE" | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -92,18 +96,33 @@ export default function AdminTriagePage() {
   const [activeEvidenceIndex, setActiveEvidenceIndex] = useState(0);
 
   const handleOpenEvidenceModal = useCallback((comp: any) => {
-    const rawEvidence = comp.evidence || comp.evidenceImages || [];
+    const rawCitizen = comp.evidence || comp.evidenceImages || [];
+    const rawResolution = comp.resolutionEvidence || [];
+    const rawEvidence = [...rawCitizen, ...rawResolution];
     if (rawEvidence.length === 0) return;
 
-    const items: EvidenceImageItem[] = rawEvidence.map((item: any) => {
-      const key = item.objectKey || item.key || "";
-      return {
-        ...item,
-        key,
-        objectKey: key,
-        url: item.url || "",
-      };
-    });
+    const items: EvidenceImageItem[] = [
+      ...rawCitizen.map((item: any, idx: number) => {
+        const key = item.objectKey || item.key || `cit-${idx}`;
+        return {
+          ...item,
+          key,
+          objectKey: key,
+          url: item.url || "",
+          originalName: item.filename || "Citizen Photo Evidence",
+        };
+      }),
+      ...rawResolution.map((item: any, idx: number) => {
+        const key = item.objectKey || item.key || `res-${idx}`;
+        return {
+          ...item,
+          key,
+          objectKey: key,
+          url: item.url || "",
+          originalName: "Officer Resolution Proof",
+        };
+      }),
+    ];
 
     setEvidenceImages(items);
     setActiveEvidenceIndex(0);
@@ -206,21 +225,31 @@ export default function AdminTriagePage() {
     }
   }, [complaints, selectedComplaintId]);
 
-  // Transform complaints into map markers with spatial coordinate validation
-  const mapComplaintItems: MapComplaintItem[] = complaints
-    .filter((c) => c && c.location && c.location.coordinates)
-    .map((c) => ({
-      id: c._id || c.id,
-      referenceNumber: c.referenceNumber,
-      title: c.title,
-      description: c.description,
-      category: c.category,
-      status: c.status,
-      priority: c.priority,
-      location: c.location,
-      address: c.address,
-      createdAt: c.createdAt,
-    }));
+  // Transform complaints into map markers with spatial coordinate validation and closed status filtering
+  // Feature: If issue status is CLOSED, do NOT show on map unless explicitly enabled by user or filtered for CLOSED
+  const mapComplaintItems: MapComplaintItem[] = useMemo(() => {
+    const allowClosed = showClosedOnMap || statusFilter === ComplaintStatus.CLOSED;
+    return complaints
+      .filter((c) => {
+        if (!c || !c.location || !c.location.coordinates) return false;
+        if (!allowClosed && (c.status === ComplaintStatus.CLOSED || c.status === ComplaintStatus.REJECTED)) {
+          return false;
+        }
+        return true;
+      })
+      .map((c) => ({
+        id: c._id || c.id,
+        referenceNumber: c.referenceNumber,
+        title: c.title,
+        description: c.description,
+        category: c.category,
+        status: c.status,
+        priority: c.priority,
+        location: c.location,
+        address: c.address,
+        createdAt: c.createdAt,
+      }));
+  }, [complaints, showClosedOnMap, statusFilter]);
 
   // Fetch officers whenever department changes in assignment modal
   useEffect(() => {
@@ -259,16 +288,17 @@ export default function AdminTriagePage() {
       const res = await fetch(`/api/v1/complaints/${complaintId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ remarks: "Administrator initiated triage review." }),
+        body: JSON.stringify({ remarks: "Administrator initiated review." }),
       });
       if (res.ok) {
+        toast.success("Review Started", "Issue is now marked under review.");
         fetchComplaints();
       } else {
         const errJson = await res.json();
-        alert(errJson.error?.message || "Failed to start review");
+        toast.error("Review Failed", errJson.error?.message || "Failed to start review");
       }
     } catch {
-      alert("Network error starting review");
+      toast.error("Network Error", "Network error starting review");
     }
   };
 
@@ -376,6 +406,38 @@ export default function AdminTriagePage() {
     }
   };
 
+  const handleCloseComplaint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComplaint) return;
+    setActionLoading(true);
+    setActionError(null);
+
+    try {
+      const res = await fetch(`/api/v1/complaints/${selectedComplaint._id}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          remarks: actionRemarks.trim() || "Municipal administrator formally closed this complaint.",
+        }),
+      });
+
+      if (res.ok) {
+        setModalType(null);
+        setSelectedComplaint(null);
+        setActionRemarks("");
+        fetchComplaints();
+      } else {
+        const errJson = await res.json();
+        setActionError(errJson.error?.message || "Failed to close complaint");
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Failed to close complaint");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleOpenDuplicatesModal = async (complaint: any) => {
     setSelectedComplaint(complaint);
     setModalType("DUPLICATES");
@@ -412,9 +474,8 @@ export default function AdminTriagePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          originalComplaintId,
-          reason: "ADMIN_CONFIRMED",
-          notes: linkNotes || "Linked by municipal triage administrator after manual review.",
+          duplicateOfId: originalComplaintId,
+          remarks: linkNotes || "Linked as duplicate by municipal triage administrator.",
         }),
       });
 
@@ -451,21 +512,20 @@ export default function AdminTriagePage() {
   const resolutionRate = total > 0 ? Math.round((resolvedCount / Math.max(1, total)) * 100) : 0;
 
   return (
-    <AdminShell>
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-              <span>Municipal Operations & Triage Console</span>
-              <span className="text-xs px-2.5 py-1 rounded-full font-mono bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold">
-                {total} Total
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Verify citizen submissions, inspect duplicate candidates, set priorities, and dispatch department officers.
-            </p>
-          </div>
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+            <span>Review & Assign Reports</span>
+            <span className="text-xs px-2.5 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20 font-bold">
+              <span className="text-lg">{total}</span> Total
+            </span>
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Review incoming citizen reports, check for nearby duplicates, set priority, and assign to field teams.
+          </p>
+        </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
@@ -473,7 +533,7 @@ export default function AdminTriagePage() {
               onClick={() => setShowMap(!showMap)}
               className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
                 showMap
-                  ? "bg-[#d95d39] text-white border-[#d95d39] shadow-sm"
+                  ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/20"
                   : "bg-card text-foreground hover:bg-secondary border-border"
               }`}
             >
@@ -515,7 +575,7 @@ export default function AdminTriagePage() {
 
           <div className="border border-border rounded-2xl p-4 bg-card shadow-sm">
             <span className="text-xs font-medium text-muted-foreground">Resolution Rate</span>
-            <div className="font-display text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
+            <div className="font-display text-2xl sm:text-3xl font-bold text-emerald-600 mt-1 tabular-nums">
               {resolutionRate}%
             </div>
           </div>
@@ -581,17 +641,80 @@ export default function AdminTriagePage() {
 
         {/* Spatial Map Preview Section */}
         {showMap && (
-          <div className="rounded-2xl overflow-hidden border border-border shadow-xl">
-            <SpatialMapPreview
-              complaints={mapComplaintItems}
-              selectedComplaintId={selectedComplaintId}
-              onSelectComplaint={(c) => setSelectedComplaintId(c ? c.id : null)}
-              userRole="admin"
-              enableClustering={true}
-              height="380px"
-              title="Admin Spatial Incident Queue"
-              description="Click any marker, cluster, or table row to inspect"
-            />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <h3 className="text-sm font-bold text-foreground">Spatial Incident Queue</h3>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  {mapComplaintItems.length} Shown on Map
+                </span>
+                {!showClosedOnMap && statusFilter !== ComplaintStatus.CLOSED && (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                    Closed Hidden
+                  </span>
+                )}
+              </div>
+
+              {/* Feature: Hide / Show Closed Issues Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowClosedOnMap((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  showClosedOnMap
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-xs"
+                    : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                }`}
+                title={showClosedOnMap ? "Closed complaints are shown on map. Click to hide." : "Closed complaints are hidden from map. Click to show."}
+              >
+                {showClosedOnMap ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Closed Issues: Shown</span>
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span>Closed Issues: Hidden</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Zero active complaints advisory if all were closed */}
+            {mapComplaintItems.length === 0 && !isLoading && (
+              <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-amber-400 shrink-0" />
+                  <p className="text-amber-300">
+                    No active open complaints on the map. Closed complaints are hidden by default.
+                  </p>
+                </div>
+                {!showClosedOnMap && statusFilter !== ComplaintStatus.CLOSED && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClosedOnMap(true)}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shrink-0 shadow-sm flex items-center gap-1"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Show Closed Issues</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="rounded-2xl overflow-hidden border border-border shadow-xl">
+              <SpatialMapPreview
+                complaints={mapComplaintItems}
+                selectedComplaintId={selectedComplaintId}
+                onSelectComplaint={(c) => setSelectedComplaintId(c ? c.id : null)}
+                userRole="admin"
+                enableClustering={true}
+                height="380px"
+                title={`Admin Spatial Incident Queue (${mapComplaintItems.length} displayed)`}
+                description="Click any marker, cluster, or table row to inspect"
+              />
+            </div>
           </div>
         )}
 
@@ -649,9 +772,9 @@ export default function AdminTriagePage() {
                       >
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <Link
-                            href={`/citizen/complaints/${complaintId}`}
+                            href={`/admin/complaints/${complaintId}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="font-mono font-bold text-foreground hover:text-primary transition-colors block"
+                            className=" font-bold text-foreground hover:text-primary transition-colors block"
                           >
                             {item.referenceNumber}
                           </Link>
@@ -660,7 +783,7 @@ export default function AdminTriagePage() {
                               {new Date(item.createdAt).toLocaleDateString()}
                             </span>
                             {item.isDuplicate && (
-                              <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded  font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                 <CopyCheck className="w-2.5 h-2.5" />
                                 Duplicate
                               </span>
@@ -672,11 +795,25 @@ export default function AdminTriagePage() {
                                   e.stopPropagation();
                                   handleOpenEvidenceModal(item);
                                 }}
-                                className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-                                title="Inspect Evidence Photos"
+                                className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                                title="Inspect Citizen Evidence Photos"
                               >
                                 <Camera className="w-2.5 h-2.5" />
                                 {(item.evidence || item.evidenceImages).length} photo{((item.evidence || item.evidenceImages).length > 1 ? "s" : "")}
+                              </button>
+                            )}
+                            {item.resolutionEvidence && item.resolutionEvidence.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEvidenceModal(item);
+                                }}
+                                className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                                title="Inspect Officer Resolution Proof Photos"
+                              >
+                                <CheckCircle2 className="w-2.5 h-2.5" />
+                                {item.resolutionEvidence.length} proof
                               </button>
                             )}
                           </div>
@@ -716,11 +853,11 @@ export default function AdminTriagePage() {
                             <StatusBadge status={item.status} />
                             {item.dueAt && ![ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED, ComplaintStatus.REJECTED].includes(item.status) && (
                               new Date(item.dueAt) < new Date() ? (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center gap-1 w-fit">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold  bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center gap-1 w-fit">
                                   <AlertTriangle className="w-2.5 h-2.5 text-rose-500 shrink-0" /> SLA OVERDUE
                                 </span>
                               ) : (
-                                <span className="text-[10px] font-mono text-muted-foreground">
+                                <span className="text-[10px]  text-muted-foreground">
                                   Due {new Date(item.dueAt).toLocaleDateString()}
                                 </span>
                               )
@@ -743,10 +880,23 @@ export default function AdminTriagePage() {
                                   e.stopPropagation();
                                   handleOpenEvidenceModal(item);
                                 }}
-                                className="p-1.5 rounded-lg bg-card text-[#d95d39] hover:bg-secondary border border-border transition-colors"
-                                title="Inspect Evidence Photos in Lightbox"
+                                className="p-1.5 rounded-lg bg-card text-blue-600 hover:bg-secondary border border-border transition-colors"
+                                title="Inspect Citizen Evidence Photos in Lightbox"
                               >
                                 <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {item.resolutionEvidence && item.resolutionEvidence.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEvidenceModal(item);
+                                }}
+                                className="p-1.5 rounded-lg bg-card text-emerald-600 hover:bg-secondary border border-emerald-500/20 transition-colors"
+                                title="Inspect Officer Resolution Proof Photos in Lightbox"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
                               </button>
                             )}
 
@@ -769,7 +919,7 @@ export default function AdminTriagePage() {
                                   e.stopPropagation();
                                   handleStartReview(item._id);
                                 }}
-                                className="px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 border border-sky-500/30 text-xs font-semibold transition-colors"
+                                className="px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 border border-sky-500/30 text-xs font-semibold transition-colors"
                               >
                                 Review
                               </button>
@@ -785,7 +935,7 @@ export default function AdminTriagePage() {
                                     setAssignedPriority(item.priority || ComplaintPriority.MEDIUM);
                                     setModalType("VERIFY");
                                   }}
-                                  className="px-2.5 py-1 rounded-lg bg-[#d95d39] hover:bg-[#c34e2c] text-white text-xs font-semibold shadow-sm transition-colors"
+                                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
                                 >
                                   Verify
                                 </button>
@@ -821,8 +971,25 @@ export default function AdminTriagePage() {
                                 </button>
                               )}
 
+                            {[ComplaintStatus.VERIFIED, ComplaintStatus.ASSIGNED, ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED].includes(item.status) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedComplaint(item);
+                                  setActionRemarks("");
+                                  setActionError(null);
+                                  setModalType("CLOSE");
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-semibold transition-colors"
+                                title="Formally Close Complaint"
+                              >
+                                Close
+                              </button>
+                            )}
+
                             <Link
-                              href={`/citizen/complaints/${item._id}`}
+                              href={`/admin/complaints/${item._id}`}
                               onClick={(e) => e.stopPropagation()}
                               className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                               title="Inspect Full Details"
@@ -878,8 +1045,9 @@ export default function AdminTriagePage() {
                     {modalType === "REJECT" && "Reject Complaint Report"}
                     {modalType === "ASSIGN" && "Assign Municipal Department & Officer"}
                     {modalType === "DUPLICATES" && "Duplicate Detection & Advisory Inspector"}
+                    {modalType === "CLOSE" && "Formally Close Complaint"}
                   </h3>
-                  <p className="text-xs font-mono text-muted-foreground mt-0.5">
+                  <p className="text-xs  text-muted-foreground mt-0.5">
                     {selectedComplaint.referenceNumber} — {selectedComplaint.title}
                   </p>
                 </div>
@@ -1128,27 +1296,30 @@ export default function AdminTriagePage() {
                         {duplicateCandidates.length} Potential Match{duplicateCandidates.length > 1 ? "es" : ""} Detected:
                       </p>
                       {duplicateCandidates.map((candidate) => {
-                        const isHighMatch = candidate.score >= 70;
+                        const candidateId = candidate.complaintId || candidate._id;
+                        const score = candidate.similarityScore ?? candidate.score ?? 0;
+                        const isHighMatch = score >= 70;
+                        const reasons: string[] = candidate.reasons || candidate.signals || [];
 
                         return (
                           <div
-                            key={candidate._id}
+                            key={candidateId}
                             className="p-3.5 rounded-xl border border-border bg-background hover:border-primary/40 transition-colors flex flex-col gap-2"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono text-xs font-bold text-foreground">
+                              <span className=" text-xs font-bold text-foreground">
                                 {candidate.referenceNumber}
                               </span>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${isHighMatch
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold  ${isHighMatch
                                       ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                       : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                                     }`}
                                 >
-                                  {candidate.score}% Match
+                                  {score}% Match
                                 </span>
-                                <span className="text-[11px] text-muted-foreground font-mono">
+                                <span className="text-[11px] text-muted-foreground ">
                                   {candidate.distanceMeters}m away
                                 </span>
                               </div>
@@ -1161,14 +1332,14 @@ export default function AdminTriagePage() {
 
                             {/* Signal chips */}
                             <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                              {candidate.signals?.map((sig: string) => (
+                              {reasons.map((sig: string) => (
                                 <span
                                   key={sig}
-                                  className="text-[9px] px-2 py-0.5 rounded font-mono bg-secondary text-muted-foreground border border-border"
+                                  className="text-[9px] px-2 py-0.5 rounded  bg-secondary text-muted-foreground border border-border"
                                 >
                                   {sig === "SAME_CATEGORY" && "Same Category"}
                                   {sig === "WITHIN_DISTANCE" && "<250m Proximity"}
-                                  {sig === "DESCRIPTION_SIMILARITY" && `Text Match (${candidate.textSimilarity}%)`}
+                                  {sig === "DESCRIPTION_SIMILARITY" && "Text Similarity"}
                                   {sig === "ADDRESS_MATCH" && "Address Match"}
                                 </span>
                               ))}
@@ -1176,17 +1347,17 @@ export default function AdminTriagePage() {
 
                             {/* Link duplicate action */}
                             <div className="pt-2 border-t border-border/60 flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground font-mono">
+                              <span className="text-[10px] text-muted-foreground ">
                                 Status: {candidate.status}
                               </span>
 
                               <button
                                 type="button"
-                                disabled={linkingComplaintId === candidate._id}
-                                onClick={() => handleLinkDuplicate(candidate._id)}
+                                disabled={linkingComplaintId === candidateId}
+                                onClick={() => handleLinkDuplicate(candidateId)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 text-xs font-semibold transition-colors disabled:opacity-50"
                               >
-                                {linkingComplaintId === candidate._id && (
+                                {linkingComplaintId === candidateId && (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 )}
                                 <span>Link as Duplicate</span>
@@ -1209,6 +1380,44 @@ export default function AdminTriagePage() {
                   </div>
                 </div>
               )}
+
+              {modalType === "CLOSE" && (
+                <form onSubmit={handleCloseComplaint} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">
+                      Closure Notes & Administrative Remarks
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={actionRemarks}
+                      onChange={(e) => setActionRemarks(e.target.value)}
+                      placeholder="e.g. Field resolution verified on site and approved by municipal inspector. Complaint formally closed."
+                      className="w-full bg-background border border-border rounded-xl p-2.5 text-xs text-foreground placeholder:text-muted-foreground"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Closing this complaint completes its lifecycle and notifies the citizen and assigned officer.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => setModalType(null)}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={actionLoading}
+                      className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>Confirm Close Complaint</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}
@@ -1221,6 +1430,5 @@ export default function AdminTriagePage() {
           onClose={() => setEvidenceLightboxOpen(false)}
         />
       </div>
-    </AdminShell>
   );
 }

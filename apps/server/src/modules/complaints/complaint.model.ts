@@ -20,7 +20,6 @@ export interface IComplaintDocument extends Document {
   address: string;
   landmark?: string;
   evidence: EvidenceItem[];
-  evidenceImages?: EvidenceItem[];
   departmentId?: Types.ObjectId;
   assignedOfficerId?: Types.ObjectId;
   dueAt?: Date;
@@ -141,10 +140,6 @@ const ComplaintSchema = new Schema<IComplaintDocument>(
       maxlength: 150,
     },
     evidence: {
-      type: [EvidenceItemMongooseSchema],
-      default: [],
-    },
-    evidenceImages: {
       type: [EvidenceItemMongooseSchema],
       default: [],
     },

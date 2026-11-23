@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   ComplaintCategory,
@@ -13,7 +14,6 @@ import { LocationPicker } from "../../components/maps/location-picker";
 import { MapComplaintItem } from "../../hooks/use-complaint-markers";
 import { useGeolocation } from "../../hooks/use-geolocation";
 import { CATEGORY_COLORS, STATUS_COLORS, DEFAULT_MAP_CENTER } from "../../lib/ola-maps-config";
-import { ThemeToggle } from "../../components/theme/theme-toggle";
 import {
   MapPin,
   Navigation,
@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Camera,
   ExternalLink,
+  EyeOff,
 } from "lucide-react";
 
 const SpatialMapPreview = dynamic(
@@ -58,6 +59,15 @@ const RADIUS_OPTIONS = [
   { label: "25 km", value: 25000 },
   { label: "50 km", value: 50000 },
   { label: "Citywide (100 km)", value: 100000 },
+];
+
+const STATUS_FILTERS = [
+  { label: "All Active Issues", value: "" },
+  { label: "Submitted", value: ComplaintStatus.SUBMITTED },
+  { label: "Under Review", value: ComplaintStatus.UNDER_REVIEW },
+  { label: "In Progress", value: ComplaintStatus.IN_PROGRESS },
+  { label: "Resolved", value: ComplaintStatus.RESOLVED },
+  { label: "Closed Issues", value: ComplaintStatus.CLOSED },
 ];
 
 const CATEGORY_FILTERS = [
@@ -100,7 +110,12 @@ function formatDistance(distKm: number): string {
   return `${distKm.toFixed(1)} km away`;
 }
 
-export default function MapsExplorerPage() {
+function MapsExplorerContent() {
+  const searchParams = useSearchParams();
+  const queryLng = searchParams.get("lng");
+  const queryLat = searchParams.get("lat");
+  const queryRef = searchParams.get("ref");
+
   const [activeTab, setActiveTab] = useState<"city" | "picker">("city");
 
   // Geolocation tracking
@@ -116,6 +131,8 @@ export default function MapsExplorerPage() {
   // Search parameters
   const [radiusMeters, setRadiusMeters] = useState<number>(10000); // 10 km default
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [showClosed, setShowClosed] = useState<boolean>(false);
   const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
 
   // Data fetching state
@@ -143,8 +160,15 @@ export default function MapsExplorerPage() {
     }
   }, [userCoords]);
 
-  // Determine effective map center: GPS location -> First complaint -> Default center
+  // Determine effective map center: Target Query Coords -> GPS location -> First complaint -> Default center
   const effectiveCenter: Coordinates = useMemo(() => {
+    if (queryLng && queryLat) {
+      const parsedLng = parseFloat(queryLng);
+      const parsedLat = parseFloat(queryLat);
+      if (!isNaN(parsedLng) && !isNaN(parsedLat)) {
+        return [parsedLng, parsedLat];
+      }
+    }
     if (userCoords && userCoords.length === 2) {
       return userCoords;
     }
@@ -152,7 +176,7 @@ export default function MapsExplorerPage() {
       return complaints[0].location.coordinates;
     }
     return DEFAULT_MAP_CENTER;
-  }, [userCoords, complaints]);
+  }, [queryLng, queryLat, userCoords, complaints]);
 
   // Fetch complaints within radius of current location (or center)
   const fetchNearbyComplaints = useCallback(async () => {
@@ -162,12 +186,18 @@ export default function MapsExplorerPage() {
     const queryCenter = userCoords || effectiveCenter;
     const [lng, lat] = queryCenter;
 
+    const shouldIncludeClosed = showClosed || statusFilter === ComplaintStatus.CLOSED;
+
     const params = new URLSearchParams();
     params.set("lng", String(lng));
     params.set("lat", String(lat));
     params.set("radius", String(radiusMeters));
+    params.set("includeClosed", shouldIncludeClosed ? "true" : "false");
     if (categoryFilter) {
       params.set("category", categoryFilter);
+    }
+    if (statusFilter) {
+      params.set("status", statusFilter);
     }
     params.set("limit", "100");
 
@@ -194,33 +224,52 @@ export default function MapsExplorerPage() {
 
           setComplaints(mapped);
 
-          // If no complaints in local radius, check if there are complaints citywide
-          if (mapped.length === 0 && radiusMeters < 100000) {
+          // If no complaints in local radius, check if there are complaints citywide or around default civic center
+          if (mapped.length === 0) {
             const fallbackParams = new URLSearchParams();
             fallbackParams.set("lng", String(lng));
             fallbackParams.set("lat", String(lat));
             fallbackParams.set("radius", "100000"); // 100 km wide
+            fallbackParams.set("includeClosed", shouldIncludeClosed ? "true" : "false");
+            if (categoryFilter) fallbackParams.set("category", categoryFilter);
+            if (statusFilter) fallbackParams.set("status", statusFilter);
             fallbackParams.set("limit", "100");
 
-            const fallbackRes = await fetch(`${apiBase}/complaints/nearby?${fallbackParams.toString()}`);
-            if (fallbackRes.ok) {
-              const fbJson = await fallbackRes.json();
-              if (fbJson.success && Array.isArray(fbJson.data)) {
-                setAllComplaintsFallback(
-                  fbJson.data.map((c: any) => ({
-                    id: c._id || c.id,
-                    referenceNumber: c.referenceNumber,
-                    title: c.title,
-                    description: c.description,
-                    category: c.category,
-                    status: c.status,
-                    priority: c.priority,
-                    location: c.location,
-                    address: c.address,
-                    createdAt: c.createdAt,
-                  }))
-                );
-              }
+            let fallbackRes = await fetch(`${apiBase}/complaints/nearby?${fallbackParams.toString()}`);
+            let fbJson = fallbackRes.ok ? await fallbackRes.json() : null;
+
+            // If still no results from current coordinates, try the default municipal center
+            if ((!fbJson || !fbJson.data || fbJson.data.length === 0) && (lng !== DEFAULT_MAP_CENTER[0] || lat !== DEFAULT_MAP_CENTER[1])) {
+              const centerParams = new URLSearchParams();
+              centerParams.set("lng", String(DEFAULT_MAP_CENTER[0]));
+              centerParams.set("lat", String(DEFAULT_MAP_CENTER[1]));
+              centerParams.set("radius", "100000");
+              centerParams.set("includeClosed", shouldIncludeClosed ? "true" : "false");
+              if (categoryFilter) centerParams.set("category", categoryFilter);
+              if (statusFilter) centerParams.set("status", statusFilter);
+              centerParams.set("limit", "100");
+
+              fallbackRes = await fetch(`${apiBase}/complaints/nearby?${centerParams.toString()}`);
+              fbJson = fallbackRes.ok ? await fallbackRes.json() : null;
+            }
+
+            if (fbJson && fbJson.success && Array.isArray(fbJson.data) && fbJson.data.length > 0) {
+              setAllComplaintsFallback(
+                fbJson.data.map((c: any) => ({
+                  id: c._id || c.id,
+                  referenceNumber: c.referenceNumber,
+                  title: c.title,
+                  description: c.description,
+                  category: c.category,
+                  status: c.status,
+                  priority: c.priority,
+                  location: c.location,
+                  address: c.address,
+                  createdAt: c.createdAt,
+                }))
+              );
+            } else {
+              setAllComplaintsFallback([]);
             }
           } else {
             setAllComplaintsFallback([]);
@@ -234,15 +283,26 @@ export default function MapsExplorerPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userCoords, effectiveCenter, radiusMeters, categoryFilter]);
+  }, [userCoords, effectiveCenter, radiusMeters, categoryFilter, statusFilter, showClosed]);
 
   useEffect(() => {
     fetchNearbyComplaints();
   }, [fetchNearbyComplaints]);
 
+  // Combined list of complaints (nearby or citywide fallback)
+  // Feature: If issue status is CLOSED, do NOT show on map unless explicitly enabled by user
+  const displayedComplaints = useMemo(() => {
+    const list = complaints.length > 0 ? complaints : allComplaintsFallback;
+    const allowClosed = showClosed || statusFilter === ComplaintStatus.CLOSED;
+    if (!allowClosed) {
+      return list.filter((c) => c.status !== ComplaintStatus.CLOSED && c.status !== ComplaintStatus.REJECTED);
+    }
+    return list.filter((c) => c.status !== ComplaintStatus.REJECTED);
+  }, [complaints, allComplaintsFallback, showClosed, statusFilter]);
+
   // Compute complaints with distance from user
   const complaintsWithDistance = useMemo(() => {
-    return complaints.map((c) => {
+    return displayedComplaints.map((c) => {
       let distanceKm: number | null = null;
       if (userCoords && c.location?.coordinates) {
         distanceKm = calculateDistanceKm(userCoords, c.location.coordinates);
@@ -254,7 +314,7 @@ export default function MapsExplorerPage() {
       }
       return 0;
     });
-  }, [complaints, userCoords]);
+  }, [displayedComplaints, userCoords]);
 
   // Selected complaint object
   const activeComplaint = useMemo(() => {
@@ -269,52 +329,50 @@ export default function MapsExplorerPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/citizen"
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+              href="/"
+              className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors min-h-[44px] py-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Overview</span>
+              <span>Back to Home</span>
             </Link>
             <div className="h-4 w-px bg-border" />
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
               <h1 className="text-sm font-bold text-foreground tracking-wide">
-                Ola Maps Geospatial Command
+                City Incident Map
               </h1>
             </div>
           </div>
 
-          {/* View Mode Tabs & Theme Toggle */}
+          {/* View Mode Tabs */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-xl border border-border">
               <button
                 type="button"
                 onClick={() => setActiveTab("city")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
                   activeTab === "city"
-                    ? "bg-[#d95d39] text-white shadow-sm"
+                    ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Municipal Issues Map</span>
+                <span>Issues Map</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("picker")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
                   activeTab === "picker"
-                    ? "bg-[#d95d39] text-white shadow-sm"
+                    ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <MapPin className="w-3.5 h-3.5" />
-                <span>Location Picker</span>
+                <span>Location Finder</span>
               </button>
             </div>
-
-            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -332,14 +390,11 @@ export default function MapsExplorerPage() {
                   <h2 className="text-base font-bold text-foreground">
                     Municipal Issues Around Your Location
                   </h2>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                    {complaints.length} Found
-                  </span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   {userCoords ? (
-                    <span className="flex items-center gap-1 text-primary font-mono text-[11px]">
+                    <span className="flex items-center gap-1 text-primary text-[11px]">
                       <Crosshair className="w-3.5 h-3.5" />
                       GPS Detected: [{userCoords[0].toFixed(4)}, {userCoords[1].toFixed(4)}]
                       {locationAccuracy ? ` (±${Math.round(locationAccuracy)}m)` : ""}
@@ -356,7 +411,7 @@ export default function MapsExplorerPage() {
                 </div>
               </div>
 
-              {/* Radius Options & Refresh */}
+              {/* Radius Options, Closed Toggle & Refresh */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center bg-secondary/60 p-1 rounded-xl border border-border gap-1">
                   {RADIUS_OPTIONS.map((opt) => (
@@ -375,6 +430,30 @@ export default function MapsExplorerPage() {
                   ))}
                 </div>
 
+                {/* Feature: Hide / Show Closed Issues Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowClosed((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    showClosed
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-xs"
+                      : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                  }`}
+                  title={showClosed ? "Closed complaints are currently shown on the map" : "Closed complaints are hidden from the map"}
+                >
+                  {showClosed ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span>Closed Issues: Shown</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span>Closed Issues: Hidden</span>
+                    </>
+                  )}
+                </button>
+
                 <button
                   type="button"
                   onClick={fetchNearbyComplaints}
@@ -386,66 +465,100 @@ export default function MapsExplorerPage() {
               </div>
             </div>
 
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
-                <Filter className="w-3.5 h-3.5 text-primary" /> Filter Category:
-              </span>
-              {CATEGORY_FILTERS.map((cat) => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => setCategoryFilter(cat.value)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all border ${
-                    categoryFilter === cat.value
-                      ? "bg-primary/10 text-primary border-primary shadow-sm"
-                      : "bg-secondary text-muted-foreground hover:text-foreground border-border"
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
+            {/* Filter Pills Bar: Status and Category */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
+                  <Layers className="w-3.5 h-3.5 text-primary" /> Filter Status:
+                </span>
+                {STATUS_FILTERS.map((st) => (
+                  <button
+                    key={st.value}
+                    type="button"
+                    onClick={() => setStatusFilter(st.value)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all border ${
+                      statusFilter === st.value
+                        ? "bg-primary/10 text-primary border-primary shadow-sm"
+                        : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
+                  <Filter className="w-3.5 h-3.5 text-primary" /> Filter Category:
+                </span>
+                {CATEGORY_FILTERS.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat.value)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all border ${
+                      categoryFilter === cat.value
+                        ? "bg-primary/10 text-primary border-primary shadow-sm"
+                        : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Zero complaints within radius advisory */}
-            {complaints.length === 0 && !isLoading && (
+            {displayedComplaints.length === 0 && !isLoading && (
               <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
                 <div className="flex items-center gap-2.5">
                   <Info className="w-5 h-5 text-amber-400 shrink-0" />
                   <div>
                     <p className="font-semibold text-amber-300">
-                      No complaints currently reported within {radiusMeters / 1000} km of your GPS coordinates.
+                      No active open issues reported within {radiusMeters / 1000} km of your GPS coordinates.
                     </p>
-                    {allComplaintsFallback.length > 0 && (
-                      <p className="text-amber-200/80 mt-0.5">
-                        We detected {allComplaintsFallback.length} active issue(s) reported in the wider municipal area.
+                    {!showClosed && statusFilter !== ComplaintStatus.CLOSED && (
+                      <p className="text-[11px] text-amber-400/80 mt-0.5">
+                        Closed complaints are hidden from the map by default.
                       </p>
                     )}
                   </div>
                 </div>
 
-                {radiusMeters < 100000 && (
-                  <button
-                    type="button"
-                    onClick={() => setRadiusMeters(100000)}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-colors shrink-0 shadow-md"
-                  >
-                    Expand to Citywide (100 km)
-                  </button>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {!showClosed && statusFilter !== ComplaintStatus.CLOSED && (
+                    <button
+                      type="button"
+                      onClick={() => setShowClosed(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Show Closed Issues</span>
+                    </button>
+                  )}
+                  {radiusMeters < 100000 && (
+                    <button
+                      type="button"
+                      onClick={() => setRadiusMeters(100000)}
+                      className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-colors shrink-0 shadow-md"
+                    >
+                      Expand to Citywide (100 km)
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
             {/* The Dynamic Spatial Map */}
             <div className="rounded-2xl overflow-hidden border border-border shadow-2xl relative">
               <SpatialMapPreview
-                complaints={complaints.length > 0 ? complaints : allComplaintsFallback}
+                complaints={displayedComplaints}
                 selectedComplaintId={selectedComplaintId}
                 onSelectComplaint={(c) => setSelectedComplaintId(c ? c.id : null)}
                 initialCenter={effectiveCenter}
                 initialZoom={14}
                 height="620px"
-                title={`Municipal Issues (${complaints.length} within ${radiusMeters / 1000} km)`}
+                title={`Municipal Issues (${displayedComplaints.length} displayed)`}
               />
             </div>
 
@@ -482,12 +595,12 @@ export default function MapsExplorerPage() {
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono font-bold text-primary text-xs">
+                            <span className="font-bold text-primary text-xs">
                               {c.referenceNumber}
                             </span>
                             <div className="flex items-center gap-1.5">
                               {c.distanceKm !== null && (
-                                <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
                                   <Navigation className="w-2.5 h-2.5" />
                                   {formatDistance(c.distanceKm)}
                                 </span>
@@ -581,5 +694,20 @@ export default function MapsExplorerPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function MapsExplorerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <span className="text-xs font-semibold text-slate-500">Loading Geospatial Explorer...</span>
+        </div>
+      }
+    >
+      <MapsExplorerContent />
+    </Suspense>
   );
 }

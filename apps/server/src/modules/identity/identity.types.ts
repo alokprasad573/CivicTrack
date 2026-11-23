@@ -2,7 +2,7 @@ import { UserRole } from "@civictrack/contracts";
 
 export interface IAuthUser {
   id: string; // MongoDB _id string
-  clerkUserId: string;
+  clerkUserId?: string;
   email: string;
   name: string;
   role: UserRole;

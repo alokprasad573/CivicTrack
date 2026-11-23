@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useId, useRef } from "react";
+import React, { useId, useRef, useEffect } from "react";
 import { Coordinates, OlaMapMode } from "@civictrack/contracts";
 import { useOlaMap } from "../../hooks/use-ola-map";
 import { useGeolocation } from "../../hooks/use-geolocation";
@@ -16,6 +16,7 @@ export interface OlaMapProps {
   selectedComplaintId?: string | null;
   onSelectComplaint?: (complaint: MapComplaintItem) => void;
   onMapClick?: (coords: Coordinates) => void;
+  onMapLoaded?: (map: any) => void;
   className?: string;
   children?: (mapState: { map: any; isLoaded: boolean }) => React.ReactNode;
 }
@@ -28,6 +29,7 @@ export function OlaMap({
   selectedComplaintId,
   onSelectComplaint,
   onMapClick,
+  onMapLoaded,
   className = "w-full h-[500px]",
   children,
 }: OlaMapProps) {
@@ -65,6 +67,12 @@ export function OlaMap({
       // Handled in useGeolocation hook
     }
   };
+
+  useEffect(() => {
+    if (isLoaded && map && onMapLoaded) {
+      onMapLoaded(map);
+    }
+  }, [isLoaded, map, onMapLoaded]);
 
   return (
     <div

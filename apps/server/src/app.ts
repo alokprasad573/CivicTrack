@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { clerkMiddleware } from "@clerk/express";
 import { env } from "./config/env.js";
 import { getDatabaseHealth } from "./config/database.js";
@@ -18,6 +19,12 @@ import { notificationRoutes } from "./modules/notifications/notification.routes.
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { duplicateRoutes } from "./modules/duplicate-detection/duplicate-detection.routes.js";
 import { slaRoutes } from "./modules/sla/sla.routes.js";
+import {
+  adminAuthRoutes,
+  officerAuthRoutes,
+  staffInvitationRoutes,
+  adminInvitationRoutes,
+} from "./modules/staff-auth/staff-auth.routes.js";
 import { sanitizeInputMiddleware } from "./common/middleware/sanitize.middleware.js";
 import {
   generalRateLimiter,
@@ -53,6 +60,67 @@ export function createApp(): Express {
       allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID", "svix-id", "svix-timestamp", "svix-signature"],
     })
   );
+
+  // Cookie parser for Staff JWT tokens
+  app.use(cookieParser());
+
+  // CSRF / Origin protection for cookie-authenticated staff mutations
+  app.use((req: Request, res: Response, next) => {
+    const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+    const hasStaffCookie = !!(
+      req.cookies?.civictrack_staff_access || req.cookies?.civictrack_staff_refresh
+    );
+    const isWebhook = req.path.startsWith("/api/v1/identity/clerk-webhook") || req.path.startsWith("/api/v1/webhooks");
+
+    if (isMutation && hasStaffCookie && !isWebhook) {
+      const origin = req.headers.origin;
+      const referer = req.headers.referer;
+
+      let requestOrigin = origin;
+      if (!requestOrigin && referer) {
+        try {
+          const parsed = new URL(referer);
+          requestOrigin = parsed.origin;
+        } catch {
+          // invalid referer
+        }
+      }
+
+      const allowed = new Set([
+        env.CLIENT_URL,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:4000",
+        "http://127.0.0.1:4000",
+      ]);
+
+      // If host matches origin
+      if (req.headers.host && requestOrigin) {
+        try {
+          const originHost = new URL(requestOrigin).host;
+          if (originHost === req.headers.host) {
+            allowed.add(requestOrigin);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!requestOrigin || !allowed.has(requestOrigin)) {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: "CSRF_DETECTED",
+            message: "Cross-origin state-changing requests are forbidden for cookie-authenticated sessions.",
+          },
+          requestId: req.id || "csrf-blocked",
+        });
+        return;
+      }
+    }
+
+    next();
+  });
 
   // Request parsing with rawBody capture for webhook signature verification
   app.use(
@@ -138,6 +206,10 @@ export function createApp(): Express {
   app.use("/api/v1/docs", docsRoutes);
 
   // Mount Domain Modules with Layered Rate Limiting
+  app.use("/api/v1/admin/auth", authWebhookRateLimiter, adminAuthRoutes);
+  app.use("/api/v1/officer/auth", authWebhookRateLimiter, officerAuthRoutes);
+  app.use("/api/v1/staff/invitations", authWebhookRateLimiter, staffInvitationRoutes);
+  app.use("/api/v1/admin/invitations", authWebhookRateLimiter, adminInvitationRoutes);
   app.use("/api/v1/webhooks", authWebhookRateLimiter, identityRoutes);
   app.use("/webhooks", authWebhookRateLimiter, identityRoutes);
   app.use("/api/v1/users", userRoutes);

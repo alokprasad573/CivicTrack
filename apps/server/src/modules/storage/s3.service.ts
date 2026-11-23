@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { Types } from "mongoose";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
@@ -6,7 +7,13 @@ import {
   MAX_EVIDENCE_FILE_SIZE,
   EvidenceItem,
 } from "@civictrack/contracts";
-import { getS3Client, getS3BucketName, PRESIGNED_VIEW_EXPIRY_SECONDS } from "../../config/s3.js";
+import {
+  getS3Client,
+  getS3BucketName,
+  PRESIGNED_UPLOAD_EXPIRY_SECONDS,
+  PRESIGNED_VIEW_EXPIRY_SECONDS,
+} from "../../config/s3.js";
+import { UploadIntentModel } from "./upload-intent.model.js";
 import { ValidationError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
 
@@ -76,15 +83,20 @@ export class S3Service {
 
   /**
    * Generate canonical, unpredictable S3 object key:
-   * complaints/{userId}/{complaintId}/{uuid}.{extension}
+   * Incident proof: complaints/{userId}/{complaintId}/{uuid}.{extension}
+   * Resolution proof: resolved/image/{complaintId}/{uuid}.{extension}
    */
   public static generateObjectKey(params: {
     userId: string;
     complaintId: string;
     extension: string;
+    folder?: string;
   }): string {
-    const { userId, complaintId, extension } = params;
+    const { userId, complaintId, extension, folder } = params;
     const uuid = crypto.randomUUID();
+    if (folder === "resolved" || folder === "resolved/image") {
+      return `resolved/image/${complaintId}/${uuid}.${extension}`;
+    }
     return `complaints/${userId}/${complaintId}/${uuid}.${extension}`;
   }
 
@@ -169,8 +181,9 @@ export class S3Service {
     files: Express.Multer.File[];
     userId: string;
     complaintId: string;
+    folder?: string;
   }): Promise<EvidenceItem[]> {
-    const { files, userId, complaintId } = params;
+    const { files, userId, complaintId, folder } = params;
     if (!files || files.length === 0) return [];
 
     const validatedItems: Array<{
@@ -194,6 +207,7 @@ export class S3Service {
         userId,
         complaintId,
         extension,
+        folder,
       });
 
       validatedItems.push({
@@ -219,6 +233,21 @@ export class S3Service {
 
         uploadedKeys.push(item.objectKey);
 
+        // Register upload intent in MongoDB if DB is connected so it can be validated and attached
+        if (UploadIntentModel.db.readyState === 1) {
+          const userObjId = Types.ObjectId.isValid(userId)
+            ? new Types.ObjectId(userId)
+            : new Types.ObjectId();
+          await UploadIntentModel.create({
+            objectKey: item.objectKey,
+            userId: userObjId,
+            contentType: item.contentType,
+            size: item.size,
+            status: "PENDING",
+            expiresAt: new Date(Date.now() + PRESIGNED_UPLOAD_EXPIRY_SECONDS * 1000),
+          });
+        }
+
         // Generate initial pre-signed view URL
         let viewUrl = "";
         try {
@@ -241,12 +270,19 @@ export class S3Service {
 
       return evidenceResults;
     } catch (uploadError) {
-      // Rollback: Delete any files that were already uploaded to S3
+      // Rollback: Delete any files that were already uploaded to S3 and any pending upload intents in DB
       logger.error("S3 upload batch failed, initiating rollback", {
         uploadedKeys,
         error: uploadError instanceof Error ? uploadError.message : String(uploadError),
       });
       await this.deleteObjects(uploadedKeys);
+      if (UploadIntentModel.db.readyState === 1 && uploadedKeys.length > 0) {
+        try {
+          await UploadIntentModel.deleteMany({ objectKey: { $in: uploadedKeys } });
+        } catch {
+          // Non-blocking cleanup
+        }
+      }
       throw uploadError;
     }
   }

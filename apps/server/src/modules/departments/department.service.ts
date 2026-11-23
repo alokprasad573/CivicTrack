@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { DepartmentModel, IDepartmentDocument } from "./department.model.js";
 import { UserModel } from "../users/user.model.js";
 import { ComplaintCategory, UserRole } from "@civictrack/contracts";
-import { ConflictError } from "../../common/errors/app-error.js";
+import { ConflictError, ValidationError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
 
 export interface CreateDepartmentDto {
@@ -20,6 +20,9 @@ export class DepartmentService {
   }
 
   public static async findById(id: string): Promise<IDepartmentDocument | null> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new ValidationError("Invalid department ID format");
+    }
     if (DepartmentModel.db.readyState !== 1) return null;
     return DepartmentModel.findById(id);
   }
@@ -35,8 +38,10 @@ export class DepartmentService {
   }
 
   public static async listOfficers(departmentId: string): Promise<any[]> {
+    if (!Types.ObjectId.isValid(departmentId)) {
+      throw new ValidationError("Invalid department ID format");
+    }
     if (UserModel.db.readyState !== 1) return [];
-    if (!Types.ObjectId.isValid(departmentId)) return [];
 
     return UserModel.find({
       departmentId: new Types.ObjectId(departmentId),

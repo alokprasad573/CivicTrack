@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Types } from "mongoose";
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   CreateUploadIntentDto,
@@ -8,16 +8,18 @@ import {
   UploadIntentResponse,
   UserRole,
   ViewUrlResponse,
+  MAX_EVIDENCE_FILE_SIZE,
 } from "@civictrack/contracts";
 import {
   getS3Client,
   getS3BucketName,
+  isS3Configured,
   PRESIGNED_UPLOAD_EXPIRY_SECONDS,
   PRESIGNED_VIEW_EXPIRY_SECONDS,
 } from "../../config/s3.js";
 import { UploadIntentModel } from "./upload-intent.model.js";
 import { ComplaintModel } from "../complaints/complaint.model.js";
-import { ForbiddenError } from "../../common/errors/app-error.js";
+import { ForbiddenError, ValidationError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
 import { IAuthUser } from "../identity/identity.types.js";
 
@@ -42,12 +44,17 @@ export class StorageService {
     const expiresAt = new Date(Date.now() + PRESIGNED_UPLOAD_EXPIRY_SECONDS * 1000);
 
     const uploads: PresignedUploadItem[] = [];
+    const rawFolder = (dto.folder || "evidence").toLowerCase().trim().replace(/^\/+|\/+$/g, "");
+    const isResolved = rawFolder === "resolved" || rawFolder.startsWith("resolved");
+    const complaintId = dto.complaintId || new Types.ObjectId().toString();
 
     for (const file of dto.files) {
       const extension = MIME_EXTENSION_MAP[file.contentType] || "bin";
       const randomEntropy = crypto.randomBytes(8).toString("hex");
       const timestamp = Date.now();
-      const objectKey = `evidence/${userId}/${timestamp}_${randomEntropy}.${extension}`;
+      const objectKey = isResolved
+        ? `resolved/image/${complaintId}/${timestamp}_${randomEntropy}.${extension}`
+        : `evidence/${userId}/${timestamp}_${randomEntropy}.${extension}`;
 
       const command = new PutObjectCommand({
         Bucket: bucketName,
@@ -105,8 +112,9 @@ export class StorageService {
     user: IAuthUser;
   }): Promise<ViewUrlResponse> {
     const { objectKey, user } = params;
+    const cleanKey = objectKey.replace(/^\/+/, "");
 
-    const isAuthorized = await this.verifyViewAuthorization(objectKey, user);
+    const isAuthorized = await this.verifyViewAuthorization(cleanKey, user);
     if (!isAuthorized) {
       throw new ForbiddenError("You are not authorized to view this evidence.");
     }
@@ -116,7 +124,7 @@ export class StorageService {
 
     const command = new GetObjectCommand({
       Bucket: bucketName,
-      Key: objectKey,
+      Key: cleanKey,
     });
 
     const viewUrl = await getSignedUrl(s3Client, command, {
@@ -124,7 +132,7 @@ export class StorageService {
     });
 
     return {
-      objectKey,
+      objectKey: cleanKey,
       viewUrl,
       expiresInSeconds: PRESIGNED_VIEW_EXPIRY_SECONDS,
     };
@@ -137,6 +145,8 @@ export class StorageService {
     objectKey: string,
     user: IAuthUser
   ): Promise<boolean> {
+    const cleanKey = objectKey.replace(/^\/+/, "");
+
     // 1. Admin can access all evidence
     if (user.role === UserRole.ADMIN) {
       return true;
@@ -144,14 +154,17 @@ export class StorageService {
 
     // 2. User uploaded it themselves
     if (
-      objectKey.startsWith(`evidence/${user.id}/`) ||
-      objectKey.startsWith(`complaints/${user.id}/`) ||
+      cleanKey.startsWith(`evidence/${user.id}/`) ||
+      cleanKey.startsWith(`complaints/${user.id}/`) ||
+      cleanKey.startsWith(`resolved/${user.id}/`) ||
       (user.clerkUserId &&
-        (objectKey.startsWith(`evidence/${user.clerkUserId}/`) ||
-          objectKey.startsWith(`complaints/${user.clerkUserId}/`))) ||
+        (cleanKey.startsWith(`evidence/${user.clerkUserId}/`) ||
+          cleanKey.startsWith(`complaints/${user.clerkUserId}/`) ||
+          cleanKey.startsWith(`resolved/${user.clerkUserId}/`))) ||
       (process.env.NODE_ENV !== "production" &&
-        (objectKey.startsWith("evidence/mock_user/") ||
-          objectKey.startsWith("complaints/mock_user/")))
+        (cleanKey.startsWith("evidence/mock_user/") ||
+          cleanKey.startsWith("complaints/mock_user/") ||
+          cleanKey.startsWith("resolved/mock_user/")))
     ) {
       return true;
     }
@@ -160,12 +173,12 @@ export class StorageService {
     if (ComplaintModel.db.readyState === 1) {
       const complaint = await ComplaintModel.findOne({
         $or: [
-          { "evidence.objectKey": objectKey },
-          { "evidence.key": objectKey },
-          { "evidenceImages.key": objectKey },
-          { "evidenceImages.objectKey": objectKey },
-          { "resolutionEvidence.objectKey": objectKey },
-          { "resolutionEvidence.key": objectKey },
+          { "evidence.objectKey": cleanKey },
+          { "evidence.key": cleanKey },
+          { "evidenceImages.key": cleanKey },
+          { "evidenceImages.objectKey": cleanKey },
+          { "resolutionEvidence.objectKey": cleanKey },
+          { "resolutionEvidence.key": cleanKey },
         ],
       });
 
@@ -181,17 +194,88 @@ export class StorageService {
         return true;
       }
 
-      // Officer belongs to the assigned department
+      // Officer belongs to the assigned department OR is assigned officer
       if (
         user.role === UserRole.OFFICER &&
-        user.departmentId &&
-        complaint.departmentId?.toString() === user.departmentId
+        ((user.departmentId && complaint.departmentId?.toString() === user.departmentId) ||
+          complaint.assignedOfficerId?.toString() === user.id)
       ) {
         return true;
       }
     }
 
     return false;
+  }
+
+  /**
+   * Validates that declared evidence items exist in MongoDB as PENDING,
+   * belong to the specified user, and have not expired.
+   */
+  public static async validateUploadIntents(params: {
+    objectKeys: string[];
+    userId: string;
+  }): Promise<void> {
+    const { objectKeys, userId } = params;
+    if (objectKeys.length === 0) return;
+    if (UploadIntentModel.db.readyState !== 1) return;
+
+    const intents = await UploadIntentModel.find({
+      objectKey: { $in: objectKeys },
+    });
+
+    const now = new Date();
+    for (const key of objectKeys) {
+      const intent = intents.find((i) => i.objectKey === key);
+      if (!intent) {
+        if (
+          key.startsWith(`complaints/${userId}/`) ||
+          key.startsWith(`resolved/image/`) ||
+          key.startsWith(`resolved/${userId}/`) ||
+          (process.env.NODE_ENV !== "production" && key.startsWith("evidence/test/"))
+        ) {
+          continue;
+        }
+        throw new ValidationError(`Evidence file '${key}' does not have a registered upload intent.`);
+      }
+      const isOwner =
+        intent.userId.toString() === userId ||
+        (process.env.NODE_ENV !== "production" && !Types.ObjectId.isValid(userId));
+      if (!isOwner) {
+        throw new ForbiddenError(`Evidence file '${key}' does not belong to the authenticated user.`);
+      }
+      if (intent.status !== "PENDING") {
+        throw new ValidationError(`Evidence file '${key}' has already been attached or is not in pending status.`);
+      }
+      if (intent.expiresAt && intent.expiresAt < now) {
+        throw new ValidationError(`Upload intent for evidence file '${key}' has expired.`);
+      }
+
+      // Check S3 Object Metadata if live S3 client is configured
+      if (isS3Configured()) {
+        try {
+          const s3Client = getS3Client();
+          const headCmd = new HeadObjectCommand({
+            Bucket: getS3BucketName(),
+            Key: key,
+          });
+          const headRes = await s3Client.send(headCmd);
+
+          if (headRes.ContentLength && headRes.ContentLength > MAX_EVIDENCE_FILE_SIZE) {
+            throw new ValidationError(`File '${key}' exceeds maximum allowed size of 10MB.`);
+          }
+
+          if (headRes.ContentType && !["image/jpeg", "image/png", "image/webp"].includes(headRes.ContentType)) {
+            throw new ValidationError(`File '${key}' has invalid Content-Type '${headRes.ContentType}'. Only JPEG, PNG, and WebP are allowed.`);
+          }
+        } catch (s3Err: any) {
+          if (s3Err instanceof ValidationError) throw s3Err;
+          if (s3Err?.$metadata?.httpStatusCode === 404 || s3Err?.name === "NotFound") {
+            throw new ValidationError(`Evidence file '${key}' was not found in storage.`);
+          }
+          logger.warn("S3 HeadObject check skipped or error encountered", { key, error: s3Err?.message });
+        }
+      }
+    }
   }
 
   /**

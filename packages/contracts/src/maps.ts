@@ -97,6 +97,7 @@ export interface RouteCalculationResult {
   steps: NavigationStep[];
   origin: Coordinates;
   destination: Coordinates;
+  isEstimated?: boolean;
 }
 
 /**

@@ -37,6 +37,7 @@ export async function apiClient<T>(
   };
 
   const response = await fetch(url, {
+    credentials: "include",
     ...customConfig,
     headers: requestHeaders,
   });

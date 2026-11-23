@@ -123,7 +123,7 @@ export default function NotificationsPage() {
                 Notification Center
               </h1>
               {unreadCount > 0 && (
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-semibold">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-semibold">
                   {unreadCount} unread
                 </span>
               )}
@@ -136,7 +136,7 @@ export default function NotificationsPage() {
           <div className="flex items-center gap-2">
             {/* Live Status indicator */}
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs font-mono text-muted-foreground"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-muted-foreground"
               title={isConnected ? "Socket.io real-time connection active" : "Connecting..."}
             >
               <span
@@ -238,7 +238,7 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span
-                          className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${badge.bg}`}
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${badge.bg}`}
                         >
                           {badge.label}
                         </span>
@@ -258,7 +258,7 @@ export default function NotificationsPage() {
                         {notif.message}
                       </p>
 
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         <Clock className="w-3 h-3" />
                         <span>{formatFullTime(notif.createdAt)}</span>
                         {notif.resourceId && (

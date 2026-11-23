@@ -116,7 +116,9 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
 
     // Target route formulation
     if (notif.resourceType === "COMPLAINT") {
-      if (role === "officer") {
+      if (role === "admin") {
+        router.push(`/admin/complaints/${notif.resourceId}`);
+      } else if (role === "officer") {
         router.push(`/officer/complaints/${notif.resourceId}`);
       } else {
         router.push(`/citizen/complaints/${notif.resourceId}`);
@@ -128,9 +130,9 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
 
   const getComplaintUrl = (notif: INotification) => {
     if (notif.resourceType === "COMPLAINT") {
-      return role === "officer"
-        ? `/officer/complaints/${notif.resourceId}`
-        : `/citizen/complaints/${notif.resourceId}`;
+      if (role === "admin") return `/admin/complaints/${notif.resourceId}`;
+      if (role === "officer") return `/officer/complaints/${notif.resourceId}`;
+      return `/citizen/complaints/${notif.resourceId}`;
     }
     return "/notifications";
   };
@@ -165,7 +167,7 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">Notifications</span>
               {unreadCount > 0 && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
                   {unreadCount} unread
                 </span>
               )}
@@ -174,7 +176,7 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
             <div className="flex items-center gap-2">
               {/* Real-time connection indicator */}
               <div
-                className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono"
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
                 title={isConnected ? "Real-time updates live" : "Connecting to real-time service..."}
               >
                 <span
@@ -243,7 +245,7 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
                         >
                           {notif.title}
                         </p>
-                        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+                        <span className="text-[10px] text-muted-foreground shrink-0">
                           {formatRelativeTime(notif.createdAt)}
                         </span>
                       </div>
@@ -287,7 +289,7 @@ export function NotificationBell({ role = "citizen" }: NotificationBellProps) {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-primary font-semibold">
+              <span className="text-[10px] uppercase tracking-wider text-primary font-semibold">
                 Live Update
               </span>
               <button

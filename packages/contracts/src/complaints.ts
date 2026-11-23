@@ -91,6 +91,12 @@ export const ResolveComplaintSchema = z.object({
 
 export type ResolveComplaintDto = z.infer<typeof ResolveComplaintSchema>;
 
+export const CloseComplaintSchema = z.object({
+  remarks: z.string().trim().max(1000).optional(),
+});
+
+export type CloseComplaintDto = z.infer<typeof CloseComplaintSchema>;
+
 export interface IComplaint {
   _id: string;
   referenceNumber: string;
@@ -120,3 +126,21 @@ export interface IComplaint {
 }
 
 export type ComplaintResponse = IComplaint;
+
+/**
+ * Explicit allowlist DTO for public nearby complaint map discovery.
+ * Strictly excludes citizen PII, internal assignments, evidence keys, and signed URLs.
+ */
+export const PublicNearbyComplaintSchema = z.object({
+  id: z.string(),
+  referenceNumber: z.string(),
+  title: z.string(),
+  category: z.nativeEnum(ComplaintCategory),
+  status: z.nativeEnum(ComplaintStatus),
+  priority: z.nativeEnum(ComplaintPriority),
+  location: GeoJsonPointSchema,
+  address: z.string(),
+  createdAt: z.union([z.string(), z.date()]),
+});
+
+export type PublicNearbyComplaint = z.infer<typeof PublicNearbyComplaintSchema>;

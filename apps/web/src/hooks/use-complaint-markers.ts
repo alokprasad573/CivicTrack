@@ -26,17 +26,16 @@ export interface MarkerCluster {
  * Validates that coordinates array contains valid numbers in proper longitude/latitude range.
  */
 export function isValidCoordinatePair(coords: unknown): coords is Coordinates {
+  if (!Array.isArray(coords) || coords.length !== 2) return false;
+  const lng = typeof coords[0] === "number" ? coords[0] : Number(coords[0]);
+  const lat = typeof coords[1] === "number" ? coords[1] : Number(coords[1]);
   return (
-    Array.isArray(coords) &&
-    coords.length === 2 &&
-    typeof coords[0] === "number" &&
-    !isNaN(coords[0]) &&
-    coords[0] >= -180 &&
-    coords[0] <= 180 &&
-    typeof coords[1] === "number" &&
-    !isNaN(coords[1]) &&
-    coords[1] >= -90 &&
-    coords[1] <= 90
+    !isNaN(lng) &&
+    !isNaN(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
   );
 }
 

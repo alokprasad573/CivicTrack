@@ -7,7 +7,7 @@ import {
   ComplaintStatus,
   UserRole,
 } from "@civictrack/contracts";
-import { NotFoundError, ForbiddenError } from "../../common/errors/app-error.js";
+import { NotFoundError, ForbiddenError, ValidationError, ServiceUnavailableError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
 import { IAuthUser } from "../identity/identity.types.js";
 
@@ -119,18 +119,38 @@ export class ComplaintQueryService {
     if (options.user.role === UserRole.CITIZEN) {
       query.citizenId = new Types.ObjectId(options.user.id);
     } else if (options.user.role === UserRole.OFFICER) {
-      if (options.assignedToMe || options.assignedOfficerId) {
+      if (options.departmentId) {
+        if (!Types.ObjectId.isValid(options.departmentId)) {
+          throw new ValidationError("Invalid department ID format");
+        }
+        if (options.user.departmentId && options.departmentId !== options.user.departmentId) {
+          throw new ForbiddenError("Officers cannot view complaints outside their assigned department");
+        }
+      }
+      if (options.assignedToMe) {
         query.assignedOfficerId = new Types.ObjectId(options.user.id);
-      } else if (options.user.departmentId) {
-        query.departmentId = new Types.ObjectId(options.user.departmentId);
       } else {
-        query.assignedOfficerId = new Types.ObjectId(options.user.id);
+        if (options.user.departmentId) {
+          query.departmentId = new Types.ObjectId(options.user.departmentId);
+        }
+        if (options.assignedOfficerId) {
+          if (!Types.ObjectId.isValid(options.assignedOfficerId)) {
+            throw new ValidationError("Invalid officer ID format");
+          }
+          query.assignedOfficerId = new Types.ObjectId(options.assignedOfficerId);
+        }
       }
     } else if (options.user.role === UserRole.ADMIN) {
       if (options.departmentId) {
+        if (!Types.ObjectId.isValid(options.departmentId)) {
+          throw new ValidationError("Invalid department ID format");
+        }
         query.departmentId = new Types.ObjectId(options.departmentId);
       }
       if (options.assignedOfficerId) {
+        if (!Types.ObjectId.isValid(options.assignedOfficerId)) {
+          throw new ValidationError("Invalid officer ID format");
+        }
         query.assignedOfficerId = new Types.ObjectId(options.assignedOfficerId);
       }
     }
@@ -140,11 +160,20 @@ export class ComplaintQueryService {
     if (options.priority) query.priority = options.priority;
 
     if (options.search) {
-      const searchRegex = new RegExp(options.search, "i");
-      query.$or = [{ title: searchRegex }, { referenceNumber: searchRegex }, { address: searchRegex }];
+      const sanitized = options.search
+        .trim()
+        .slice(0, 100)
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (sanitized.length > 0) {
+        const searchRegex = new RegExp(sanitized, "i");
+        query.$or = [{ title: searchRegex }, { referenceNumber: searchRegex }, { address: searchRegex }];
+      }
     }
 
     if (ComplaintModel.db.readyState !== 1) {
+      if (process.env.NODE_ENV === "production") {
+        throw new ServiceUnavailableError("Database is currently unavailable");
+      }
       return { complaints: [], total: 0, page, limit, totalPages: 0 };
     }
 
@@ -176,9 +205,19 @@ export class ComplaintQueryService {
     latitude: number;
     maxDistanceMeters?: number;
     category?: ComplaintCategory;
+    status?: string;
+    includeClosed?: boolean;
     limit?: number;
   }): Promise<IComplaintDocument[]> {
-    const { longitude, latitude, maxDistanceMeters = 10000, category, limit = 100 } = params;
+    const {
+      longitude,
+      latitude,
+      maxDistanceMeters = 10000,
+      category,
+      status,
+      includeClosed = false,
+      limit = 100,
+    } = params;
 
     if (ComplaintModel.db.readyState !== 1) {
       return [];
@@ -194,16 +233,36 @@ export class ComplaintQueryService {
           $maxDistance: maxDistanceMeters,
         },
       },
-      status: { $nin: [ComplaintStatus.REJECTED, ComplaintStatus.CLOSED] },
     };
+
+    if (status) {
+      if (status === "ACTIVE") {
+        query.status = {
+          $nin: [
+            ComplaintStatus.REJECTED,
+            ComplaintStatus.RESOLVED,
+            ComplaintStatus.CLOSED,
+          ],
+        };
+      } else if (status === "CLOSED_RESOLVED") {
+        query.status = {
+          $in: [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED],
+        };
+      } else {
+        query.status = status;
+      }
+    } else if (!includeClosed) {
+      query.status = { $nin: [ComplaintStatus.REJECTED, ComplaintStatus.CLOSED] };
+    } else {
+      query.status = { $nin: [ComplaintStatus.REJECTED] };
+    }
 
     if (category) {
       query.category = category;
     }
 
     return ComplaintModel.find(query)
-      .populate("citizenId", "name email")
-      .populate("departmentId", "name code")
+      .select("_id referenceNumber title category status priority location address createdAt")
       .limit(limit);
   }
 }

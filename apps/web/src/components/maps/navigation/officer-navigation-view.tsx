@@ -53,7 +53,7 @@ export function OfficerNavigationView({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-primary font-mono">
+              <span className="text-xs font-bold text-primary">
                 {complaint.referenceNumber}
               </span>
               <span className="text-xs text-muted-foreground truncate max-w-xs">

@@ -124,7 +124,7 @@ export function EvidenceLightbox({
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-foreground truncate">{filename}</h3>
-            <p className="text-[11px] font-mono text-muted-foreground truncate">
+            <p className="text-[11px]  text-muted-foreground truncate">
               {objectKey || "Evidence File"}
             </p>
           </div>
@@ -133,7 +133,7 @@ export function EvidenceLightbox({
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           {images.length > 1 && (
-            <span className="text-xs font-mono font-medium text-muted-foreground mr-2">
+            <span className="text-xs  font-medium text-muted-foreground mr-2">
               {currentIndex + 1} / {images.length}
             </span>
           )}
@@ -281,12 +281,12 @@ export function EvidenceLightbox({
         <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <FileCode className="w-3.5 h-3.5 text-primary" />
-            <span className="font-mono text-[11px]">{mimeType}</span>
+            <span className=" text-[11px]">{mimeType}</span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <HardDrive className="w-3.5 h-3.5 text-primary" />
-            <span className="font-mono text-[11px]">{sizeFormatted}</span>
+            <span className=" text-[11px]">{sizeFormatted}</span>
           </div>
 
           {uploadedDate && (

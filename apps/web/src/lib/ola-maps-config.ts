@@ -22,7 +22,7 @@ export function getClientOlaMapsApiKey(): string {
 }
 
 /**
- * Civic category color palette matching the restrained dark/charcoal/teal theme
+ * Civic category color palette
  */
 export const CATEGORY_COLORS: Record<ComplaintCategory, string> = {
   [ComplaintCategory.ROADS_POTHOLES]: "#f59e0b",       // Amber / Potholes & Road Repair

@@ -1,502 +1,349 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { UserButton } from "@clerk/nextjs";
 import {
-  ShieldCheck,
   MapPin,
-  Search,
-  Plus,
   ArrowRight,
   LogIn,
   UserPlus,
   LayoutDashboard,
   CheckCircle2,
-  Clock,
-  ChevronRight,
-  Layers,
   Sparkles,
-  SlidersHorizontal,
+  Camera,
   Wrench,
-  X,
-  ExternalLink,
+  Building2,
+  Landmark,
 } from "lucide-react";
-import { ThemeToggle } from "../components/theme/theme-toggle";
-import { StatusBadge } from "../components/ui/status-badge";
-import { ComplaintStatus } from "@civictrack/contracts";
 
-const CATEGORIES = [
-  { id: "ROADS_POTHOLES", label: "Roads & Potholes", slaHours: 48, desc: "Craters, road cave-ins, broken curbs, damaged asphalt" },
-  { id: "WATER_SUPPLY", label: "Water Supply & Leaks", slaHours: 24, desc: "Pipeline bursts, contaminated tap water, low pressure" },
-  { id: "GARBAGE_SANITATION", label: "Garbage & Sanitation", slaHours: 24, desc: "Overflowing dumpsters, illegal trash dumping, debris" },
-  { id: "DRAINAGE_SEWAGE", label: "Drainage & Sewage", slaHours: 48, desc: "Blocked storm drains, overflowing sewage, open manholes" },
-  { id: "STREETLIGHTS", label: "Streetlights & Poles", slaHours: 24, desc: "Dark streetlights, flickering fixtures, broken poles" },
-  { id: "ELECTRICITY", label: "Electricity Grid", slaHours: 12, desc: "Exposed wires, transformer sparks, leaning electricity poles" },
-  { id: "PUBLIC_PARKS", label: "Public Parks & Trees", slaHours: 72, desc: "Fallen branches, damaged playground gear, overgrown bushes" },
-  { id: "OTHER", label: "General Municipal Issues", slaHours: 48, desc: "Noise violations, encroachment, other municipal concerns" },
-];
-
-const PERSONA_PILLS = [
-  { id: "PUBLIC", label: "Public", href: "/" },
-  { id: "CITIZEN", label: "Citizen Portal", href: "/citizen" },
-  { id: "ADMIN", label: "Admin Console", href: "/admin" },
-  { id: "OFFICER", label: "Officer Field", href: "/officer" },
-];
-
-export default function HomePage() {
-  const { isSignedIn, isLoaded, user } = useUser();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [complaints, setComplaints] = useState<any[]>([]);
-  const [isLoadingComplaints, setIsLoadingComplaints] = useState(false);
-  const [stats, setStats] = useState({
-    total: 0,
-    open: 0,
-    resolved: 0,
-  });
-  const [selectedComplaint, setSelectedComplaint] = useState<any | null>(null);
-
-  // Fetch recent public complaints for metrics and reference tracking
-  useEffect(() => {
-    async function fetchPublicData() {
-      setIsLoadingComplaints(true);
-      try {
-        const res = await fetch("/api/v1/complaints?page=1&limit=15");
-        if (res.ok) {
-          const json = await res.json();
-          const items = Array.isArray(json.data) ? json.data : json.data?.complaints || [];
-          setComplaints(items);
-
-          const total = json.meta?.total ?? json.data?.total ?? items.length;
-          const open = items.filter((c: any) =>
-            [ComplaintStatus.SUBMITTED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.VERIFIED, ComplaintStatus.ASSIGNED, ComplaintStatus.IN_PROGRESS].includes(c.status)
-          ).length;
-          const resolved = items.filter((c: any) =>
-            [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED].includes(c.status)
-          ).length;
-
-          setStats({
-            total: total > 0 ? total : 24,
-            open: open > 0 ? open : 9,
-            resolved: resolved > 0 ? resolved : 14,
-          });
-        }
-      } catch (e) {
-        // Fallback default stats for display
-        setStats({ total: 24, open: 9, resolved: 14 });
-      } finally {
-        setIsLoadingComplaints(false);
-      }
-    }
-
-    fetchPublicData();
-  }, []);
-
-  // Filter complaints based on search query
-  const filteredComplaints = complaints.filter((c) => {
-    if (!searchQuery.trim()) return false;
-    const q = searchQuery.toLowerCase();
-    const ref = (c.referenceNumber || c.id || "").toLowerCase();
-    const title = (c.title || "").toLowerCase();
-    const desc = (c.description || "").toLowerCase();
-    const addr = (c.address || c.location?.address || "").toLowerCase();
-    return ref.includes(q) || title.includes(q) || desc.includes(q) || addr.includes(q);
-  });
+export default async function HomePage() {
+  const { userId } = await auth();
+  const isSignedIn = !!userId;
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-200">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-card/95 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          {/* Brand Logo */}
+    <div className="flex min-h-screen flex-col bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary">
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-50 border-b border-border/80 bg-card/85 backdrop-blur-md transition-colors">
+        <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-[#d95d39] flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-              <ShieldCheck className="w-5 h-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
+              <Landmark className="h-5 w-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-lg tracking-tight text-foreground">
-                  CivicTrack
-                </span>
-                <span className="hidden sm:inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold">
-                  Civic Ledger
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground hidden sm:block">
-                Municipal Infrastructure & Resolution Portal
-              </p>
+            <div className="flex flex-col">
+              <span className="text-xl font-bold tracking-tight text-foreground">
+                CivicTrack
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground -mt-0.5">
+                City Issue Resolution System
+              </span>
             </div>
           </Link>
 
-          {/* Persona Switcher Pills */}
-          <div className="hidden md:flex items-center rounded-xl p-1 gap-1 border border-border bg-secondary/50">
-            {PERSONA_PILLS.map((item) => {
-              const isSelected = item.id === "PUBLIC";
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    isSelected
-                      ? "bg-[#d95d39] text-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Right Header: Theme Toggle + Auth Controls */}
-          <div className="flex items-center gap-2.5">
-            <ThemeToggle />
-
-            {!isLoaded ? (
-              <div className="w-8 h-8 rounded-full bg-secondary animate-pulse" />
-            ) : !isSignedIn ? (
-              <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {!isSignedIn ? (
+              <>
                 <Link
                   href="/sign-in"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-secondary transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground shadow-xs transition hover:bg-secondary min-h-[44px]"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Sign In</span>
+                  <LogIn className="h-4 w-4 text-muted-foreground" />
+                  <span>Citizen Sign In</span>
                 </Link>
                 <Link
                   href="/sign-up"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#d95d39] hover:bg-[#c34e2c] text-white text-xs font-semibold shadow-sm transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:bg-primary/90 active:scale-[0.98] min-h-[44px]"
                 >
-                  <UserPlus className="w-3.5 h-3.5" />
+                  <UserPlus className="h-4 w-4" />
                   <span>Register</span>
                 </Link>
-              </div>
+              </>
             ) : (
-              <div className="flex items-center gap-2.5 pl-2 border-l border-border">
+              <>
                 <Link
                   href="/citizen"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-secondary transition"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:bg-primary/90 active:scale-[0.98] min-h-[44px]"
                 >
-                  <LayoutDashboard className="w-3.5 h-3.5 text-[#d95d39]" />
-                  <span className="hidden sm:inline">My Dashboard</span>
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Citizen Dashboard</span>
                 </Link>
                 <UserButton
                   appearance={{
                     elements: {
-                      userButtonAvatarBox: "w-8 h-8 rounded-lg ring-1 ring-border",
+                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-border",
                     },
                   }}
                 />
-              </div>
+              </>
             )}
           </div>
         </div>
       </header>
 
-      {/* Main Public Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
-        {/* Hero Section */}
-        <section className="rounded-3xl border border-border p-6 sm:p-10 lg:p-12 bg-gradient-to-br from-card via-card/80 to-secondary/40 shadow-sm relative overflow-hidden">
-          <div className="max-w-3xl space-y-5 relative z-10">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Transparent Civic Issue Reporting & Resolution Tracking
-            </div>
+      {/* Main Content Area */}
+      <main className="flex-1">
+        {/* SECTION 1: HERO */}
+        <section className="relative overflow-hidden py-16 sm:py-24 lg:py-28 border-b border-border/80">
+          {/* Subtle Ambient Background */}
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-background to-background -z-10" />
 
-            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold leading-[1.15] text-foreground">
-              Report local infrastructure issues with precision and full audit visibility.
-            </h1>
-
-            <p className="text-sm sm:text-base leading-relaxed max-w-2xl text-muted-foreground">
-              CivicTrack connects residents with municipal review teams and field department officers. Pin exact locations on Ola Maps, attach private S3 photo evidence, and follow every state transition from submission to verified closure.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link
-                href={isSignedIn ? "/citizen/report" : "/sign-up"}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold bg-[#d95d39] hover:bg-[#c34e2c] text-white shadow-sm transition"
-              >
-                <Plus className="w-4 h-4" />
-                Report an Issue
-              </Link>
-              <Link
-                href="/map"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border border-border bg-card hover:bg-secondary text-foreground transition"
-              >
-                <MapPin className="w-4 h-4 text-[#d95d39]" />
-                Explore Civic Map
-              </Link>
-              <a
-                href="#track-section"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border border-border bg-card hover:bg-secondary text-foreground transition"
-              >
-                <Search className="w-4 h-4 text-[#d95d39]" />
-                Track a Complaint
-              </a>
-              <Link
-                href="/admin"
-                className="inline-flex items-center gap-1.5 px-4 py-3 rounded-xl text-xs font-semibold text-[#d95d39] hover:underline"
-              >
-                Explore Admin & Officer Consoles
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
-
-          {/* Metrics Strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-10 pt-8 border-t border-border">
-            {[
-              { label: "Total Tracked Reports", value: stats.total, sub: "GeoJSON 2dsphere indexed" },
-              { label: "Active Field Queue", value: stats.open, sub: "Verified & assigned" },
-              { label: "Resolved & Verified", value: stats.resolved, sub: "With photo proof" },
-              { label: "Canonical Lifecycle States", value: "8 States", sub: "Immutable audit trail" },
-            ].map((stat, idx) => (
-              <div key={idx} className="rounded-2xl p-4 border border-border bg-card">
-                <div className="text-xs font-medium text-muted-foreground">{stat.label}</div>
-                <div className="font-display text-2xl sm:text-3xl font-bold mt-1 tabular-nums text-foreground">
-                  {stat.value}
+          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+              {/* Left Column: Heading, Value Prop, CTAs */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider shadow-xs">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Connecting Neighbors & City Services</span>
                 </div>
-                <div className="text-[11px] font-semibold mt-1 text-emerald-600 dark:text-emerald-400">
-                  {stat.sub}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
 
-        {/* How It Works Section */}
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-display text-2xl font-bold text-foreground">How CivicTrack Works</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              End-to-end accountability across citizens, administrators, and field officers
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                step: "01",
-                title: "Geo-Tagged Submission",
-                desc: "Citizens pin the issue on Ola Maps, upload photo evidence via AWS S3, and receive a permanent CT-YYYY reference.",
-              },
-              {
-                step: "02",
-                title: "Admin Review & Deduplication",
-                desc: "Administrators inspect duplicate candidates within 250m, verify legitimacy, set priority, and assign a department.",
-              },
-              {
-                step: "03",
-                title: "Officer Field Execution",
-                desc: "Assigned department officers navigate to the site, log progress notes, and upload post-repair resolution evidence.",
-              },
-              {
-                step: "04",
-                title: "Citizen Confirmation",
-                desc: "Citizens receive real-time notifications, inspect resolution proof, and submit ratings to close the ticket.",
-              },
-            ].map((item) => (
-              <div key={item.step} className="rounded-2xl border border-border bg-card p-5 space-y-2.5">
-                <span className="inline-block font-mono text-xs font-semibold px-2.5 py-0.5 rounded-lg border border-orange-500/20 bg-orange-500/10 text-[#d95d39]">
-                  STEP {item.step}
-                </span>
-                <h3 className="text-sm font-bold text-foreground">{item.title}</h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-[1.15] tracking-tight">
+                  Report local issues. <br />
+                  <span className="text-primary">Track when they get fixed.</span>
+                </h1>
 
-        {/* Supported Issue Categories */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-2xl font-bold text-foreground">
-                Supported Civic Categories & SLA Targets
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Every category features committed municipal turnaround SLAs enforced by automatic escalation scans
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {CATEGORIES.map((cat) => (
-              <Link
-                key={cat.id}
-                href={isSignedIn ? `/citizen/report?category=${cat.id}` : "/sign-up"}
-                className="rounded-2xl border border-border bg-card p-4 hover:border-[#d95d39]/60 hover:bg-secondary/40 transition group flex items-center justify-between"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-foreground group-hover:text-[#d95d39] transition-colors">
-                    {cat.label}
-                  </div>
-                  <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
-                    Target SLA: <span className="font-semibold text-foreground">{cat.slaHours}h</span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-[#d95d39] group-hover:translate-x-0.5 transition-all" />
-              </Link>
-            ))}
-          </div>
-        </section>
+                <p className="text-base sm:text-lg text-muted-foreground max-w-xl leading-relaxed">
+                  Notice a pothole, broken streetlight, or water leak? CivicTrack sends your report directly to the right municipal department and keeps you informed until the repair is complete.
+                </p>
 
-        {/* Track Complaint Reference Search Section */}
-        <section id="track-section" className="max-w-3xl mx-auto space-y-6 pt-6">
-          <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
-            <h2 className="font-display text-2xl font-bold text-foreground">
-              Track Complaint Reference
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Enter a CivicTrack reference number (e.g.,{" "}
-              <span className="font-mono font-semibold text-[#d95d39]">CT-2026-000001</span>) or keyword to inspect its public lifecycle timeline.
-            </p>
-            <div className="relative">
-              <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by reference number (e.g. CT-2026...) or street address..."
-                className="w-full border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none bg-background text-foreground focus:border-[#d95d39] transition-colors"
-              />
-            </div>
-          </div>
-
-          {/* Search Results */}
-          {searchQuery.trim().length > 0 && (
-            <div className="space-y-3">
-              <p className="text-xs font-mono text-muted-foreground px-1">
-                Found {filteredComplaints.length} matching incident(s):
-              </p>
-              {filteredComplaints.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-card p-8 text-center space-y-2">
-                  <Search className="w-8 h-8 text-muted-foreground mx-auto opacity-40" />
-                  <p className="text-sm font-semibold text-foreground">No matching complaints found</p>
-                  <p className="text-xs text-muted-foreground">
-                    Try searching with the full reference format or check your reference number.
-                  </p>
-                </div>
-              ) : (
-                filteredComplaints.map((c) => (
-                  <div
-                    key={c.id || c._id}
-                    onClick={() => setSelectedComplaint(c)}
-                    className="rounded-2xl border border-border bg-card p-4 cursor-pointer transition hover:border-[#d95d39]/60 hover:bg-secondary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                {/* Primary & Secondary Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <Link
+                    href={isSignedIn ? "/citizen/report" : "/sign-up"}
+                    className="px-8 py-3.5 bg-primary text-primary-foreground rounded-xl font-bold shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all text-center flex items-center justify-center gap-2 min-h-[48px] text-sm"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-[#d95d39]">
-                          {c.referenceNumber || c.id}
-                        </span>
-                        <StatusBadge status={c.status} />
-                      </div>
-                      <h4 className="text-sm font-semibold text-foreground">{c.title}</h4>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {c.address || c.location?.address || "Location pinned on map"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-secondary"
-                      >
-                        Inspect Timeline
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </section>
+                    <span>Report an Issue</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
 
-        {/* Complaint Detail Modal for Public Search */}
-        {selectedComplaint && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between pb-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-[#d95d39]">
-                    {selectedComplaint.referenceNumber || selectedComplaint.id}
-                  </span>
-                  <StatusBadge status={selectedComplaint.status} />
+                  <Link
+                    href="/map"
+                    className="px-8 py-3.5 bg-card text-foreground border border-border rounded-xl font-semibold hover:bg-secondary transition-all text-center flex items-center justify-center gap-2 shadow-xs min-h-[48px] text-sm"
+                  >
+                    <MapPin className="h-4 w-4 text-primary" />
+                    <span>Explore City Map</span>
+                  </Link>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedComplaint(null)}
-                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+
+                {/* Clear benefits row */}
+                <div className="pt-6 border-t border-border flex flex-wrap items-center gap-6 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>Free for all residents</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    <span>Precise map location</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>Photo proof on completion</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <h3 className="font-display text-lg font-bold text-foreground">
-                  {selectedComplaint.title}
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {selectedComplaint.address || selectedComplaint.location?.address || "Address pinned on municipal map"}
+              {/* Right Column: Signature Card */}
+              <div className="lg:col-span-5 relative">
+                <div className="relative bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 lg:p-10 shadow-2xl shadow-primary/20 text-white">
+                  <div className="relative z-10 space-y-6">
+                    <div className="flex items-center justify-between border-b border-white/20 pb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-xs font-semibold tracking-wider uppercase text-blue-100">
+                          Active City Services
+                        </span>
+                      </div>
+                      <span className="text-[10px] bg-white/20 px-2.5 py-0.5 rounded-full font-semibold text-white">
+                        Live Tracking
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15">
+                        <p className="font-bold text-white text-sm mb-1">
+                          Direct Department Dispatch
+                        </p>
+                        <p className="text-blue-100 leading-relaxed">
+                          Reports are verified and routed straight to the responsible team — roads, sanitation, electricity, or water.
+                        </p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15">
+                        <p className="font-bold text-white text-sm mb-1">
+                          Clear Target Response Times
+                        </p>
+                        <p className="text-blue-100 leading-relaxed">
+                          Every category has a target resolution timeframe so issues are addressed without unnecessary delays.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Staff portal sign in quick links */}
+                    <div className="pt-2 border-t border-white/20">
+                      <p className="text-[11px] text-blue-200 mb-2 font-medium">
+                        Are you municipal staff?
+                      </p>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <Link
+                          href="/admin/login"
+                          className="py-2.5 px-3 bg-white text-blue-900 rounded-xl font-bold text-xs text-center hover:bg-blue-50 transition shadow-xs flex items-center justify-center gap-1.5 min-h-[44px]"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>Admin Portal</span>
+                        </Link>
+                        <Link
+                          href="/officer/login"
+                          className="py-2.5 px-3 bg-white/20 text-white border border-white/30 rounded-xl font-bold text-xs text-center hover:bg-white/30 transition flex items-center justify-center gap-1.5 min-h-[44px]"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>Field Officer</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 2: HOW IT WORKS IN 3 SIMPLE STEPS */}
+        <section className="py-20 bg-card">
+          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                Simple 3-Step Process
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
+                How CivicTrack Works
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                From spotting an issue in your neighborhood to seeing it repaired.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+              {/* Step 1 */}
+              <div className="rounded-3xl border border-border bg-background/50 p-8 shadow-xs hover:shadow-md transition-all space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                  <Camera className="h-6 w-6" />
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider">Step 1</span>
+                  <h3 className="text-lg font-bold text-foreground">
+                    Take a Photo & Describe
+                  </h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Choose the category (road, water, lights, trash) and attach photos showing what needs attention.
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-border bg-secondary/30 text-xs text-muted-foreground leading-relaxed">
-                {selectedComplaint.description}
+              {/* Step 2 */}
+              <div className="rounded-3xl border border-border bg-background/50 p-8 shadow-xs hover:shadow-md transition-all space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                  <MapPin className="h-6 w-6" />
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider">Step 2</span>
+                  <h3 className="text-lg font-bold text-foreground">
+                    Pin the Exact Location
+                  </h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Click on the interactive city map or use your device GPS so field teams know exactly where to go.
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-xl border border-border bg-secondary/20">
-                  <span className="text-muted-foreground block text-[11px]">Category</span>
-                  <span className="font-semibold text-foreground">
-                    {selectedComplaint.category?.replace("_", " ") || "MUNICIPAL"}
-                  </span>
+              {/* Step 3 */}
+              <div className="rounded-3xl border border-border bg-background/50 p-8 shadow-xs hover:shadow-md transition-all space-y-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-500/20">
+                  <CheckCircle2 className="h-6 w-6" />
                 </div>
-                <div className="p-3 rounded-xl border border-border bg-secondary/20">
-                  <span className="text-muted-foreground block text-[11px]">Reported On</span>
-                  <span className="font-mono text-foreground">
-                    {selectedComplaint.createdAt
-                      ? new Date(selectedComplaint.createdAt).toLocaleDateString()
-                      : "Recently"}
-                  </span>
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Step 3</span>
+                  <h3 className="text-lg font-bold text-foreground">
+                    Follow the Repair
+                  </h3>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                {isSignedIn && (
-                  <Link
-                    href={`/citizen/complaints/${selectedComplaint.id || selectedComplaint._id}`}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#d95d39] hover:bg-[#c34e2c] text-white text-xs font-semibold shadow-sm transition"
-                  >
-                    <span>Open Full Incident Record</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedComplaint(null)}
-                  className="px-4 py-2 rounded-xl border border-border text-xs font-medium hover:bg-secondary"
-                >
-                  Close
-                </button>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Get updates as municipal officers arrive on-site, perform the repair, and upload completion proof.
+                </p>
               </div>
             </div>
           </div>
-        )}
+        </section>
+
+        {/* SECTION 3: MUNICIPAL ROLES OVERVIEW */}
+        <section className="py-16 border-t border-border bg-background">
+          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="rounded-3xl border border-border bg-card p-8 lg:p-12 shadow-xs">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 divide-y lg:divide-y-0 lg:divide-x divide-border">
+                <div className="space-y-3 lg:pr-6">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+                    <h4 className="font-bold text-foreground">Citizen Portal</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Report local problems in a few taps and track progress until they are solved.
+                  </p>
+                  <Link
+                    href="/citizen"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline min-h-[44px]"
+                  >
+                    <span>Open Citizen Portal</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+
+                <div className="space-y-3 lg:px-6 pt-6 lg:pt-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <h4 className="font-bold text-foreground">Municipal Administration</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Review incoming reports, assign field teams, manage staff, and track resolution times.
+                  </p>
+                  <Link
+                    href="/admin/login"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline min-h-[44px]"
+                  >
+                    <span>Sign in as Administrator</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+
+                <div className="space-y-3 lg:pl-6 pt-6 lg:pt-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                    <h4 className="font-bold text-foreground">Field Operations</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    View assigned tasks, navigate to incident locations, and upload photo proof upon completion.
+                  </p>
+                  <Link
+                    href="/officer/login"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline min-h-[44px]"
+                  >
+                    <span>Sign in as Field Officer</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border bg-card/60 py-8 text-xs text-muted-foreground mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-lg bg-[#d95d39] flex items-center justify-center text-white">
-              <ShieldCheck className="w-3.5 h-3.5" />
-            </div>
-            <span className="font-display font-semibold text-foreground">CivicTrack</span>
-            <span>&bull; Municipal Issue Reporting and Resolution System</span>
-          </div>
+      <footer className="border-t border-border bg-card py-8">
+        <div className="container mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8 text-xs text-muted-foreground">
+          <p>
+            &copy; {new Date().getFullYear()} CivicTrack — Smart Civic Complaint Management System.
+          </p>
           <div className="flex items-center gap-4">
             <Link href="/citizen" className="hover:text-foreground">Citizen Portal</Link>
-            <Link href="/admin" className="hover:text-foreground">Admin Console</Link>
-            <Link href="/officer" className="hover:text-foreground">Field Officer</Link>
-            <Link href="/map" className="hover:text-foreground">Live Map</Link>
+            <span>&bull;</span>
+            <Link href="/admin/login" className="hover:text-foreground">Staff Login</Link>
+            <span>&bull;</span>
+            <Link href="/map" className="hover:text-foreground">City Map</Link>
           </div>
         </div>
       </footer>

@@ -89,6 +89,14 @@ export class ComplaintSubmissionService {
       departmentId,
     };
 
+    // Validate upload intents BEFORE persisting to database
+    if (dto.evidence && dto.evidence.length > 0) {
+      await StorageService.validateUploadIntents({
+        objectKeys: dto.evidence.map((e) => e.objectKey),
+        userId: citizenId,
+      });
+    }
+
     // If database is offline (test mode), return instantiated document
     if (ComplaintModel.db.readyState !== 1) {
       const offlineDoc = new ComplaintModel({

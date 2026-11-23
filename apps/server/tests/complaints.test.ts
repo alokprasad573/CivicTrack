@@ -9,6 +9,7 @@ import {
   AssignComplaintSchema,
   StartWorkSchema,
   ResolveComplaintSchema,
+  CloseComplaintSchema,
   ComplaintCategory,
   ComplaintStatus,
   ComplaintPriority,
@@ -66,7 +67,19 @@ async function runComplaintTests(): Promise<void> {
   if (validGeoRes.status !== 200 || !validGeoRes.body.success) {
     throw new Error("Failed: valid nearby spatial query must return 200 OK");
   }
-  console.log("    -> Valid nearby query processed successfully\n");
+
+  // Verify strict allowlist DTO: NO citizen PII, NO internal assignments, NO evidence keys, NO signed URLs
+  if (Array.isArray(validGeoRes.body.data) && validGeoRes.body.data.length > 0) {
+    for (const item of validGeoRes.body.data) {
+      if ("citizenId" in item || "citizen" in item || "assignedOfficerId" in item) {
+        throw new Error("Privacy breach: Public nearby complaints leaked internal citizen/officer IDs!");
+      }
+      if ("evidence" in item || "evidenceImages" in item || "resolutionEvidence" in item) {
+        throw new Error("Privacy breach: Public nearby complaints leaked private evidence objects/URLs!");
+      }
+    }
+  }
+  console.log("    -> Valid nearby query processed successfully with strict privacy allowlist DTO\n");
 
   // 4. Schema-level validation unit tests
   console.log("4. Testing Zod Complaint Contracts & GeoJSON Validation:");
@@ -185,11 +198,15 @@ async function runComplaintTests(): Promise<void> {
   const unauthVerify = await request(app).post("/api/v1/complaints/673d32840000000000000001/verify").send({});
   const unauthReject = await request(app).post("/api/v1/complaints/673d32840000000000000001/reject").send({ reason: "Test reason" });
   const unauthAssign = await request(app).post("/api/v1/complaints/673d32840000000000000001/assign").send({ departmentId: "673d32840000000000000010" });
+  const unauthClose = await request(app).post("/api/v1/complaints/673d32840000000000000001/close").send({});
 
-  if (unauthReview.status !== 401 || unauthVerify.status !== 401 || unauthReject.status !== 401 || unauthAssign.status !== 401) {
+  if (unauthReview.status !== 401 || unauthVerify.status !== 401 || unauthReject.status !== 401 || unauthAssign.status !== 401 || unauthClose.status !== 401) {
     throw new Error("Failed: Unauthenticated admin workflow calls must be rejected with 401");
   }
-  console.log("   -> All admin endpoints (review, verify, reject, assign) protected with 401 guards\n");
+  console.log("   -> All admin endpoints (review, verify, reject, assign, close) protected with 401 guards\n");
+
+  const validClose = CloseComplaintSchema.safeParse({ remarks: "Admin verified and closed" });
+  if (!validClose.success) throw new Error("Failed: Valid CloseComplaintSchema should pass");
 
   // 9. Phase 8 Officer Workflow & Resolution Verification
   console.log("9. Testing Phase 8 Officer Workflow & Resolution Contracts:");

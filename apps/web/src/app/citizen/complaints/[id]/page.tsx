@@ -5,24 +5,16 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   ComplaintCategory,
+  ComplaintPriority,
   ComplaintStatus,
 } from "@civictrack/contracts";
-import { CitizenShell } from "../../../../components/layout/citizen-shell";
-import { CATEGORY_COLORS } from "../../../../lib/ola-maps-config";
+import { STATUS_COLORS, CATEGORY_COLORS } from "../../../../lib/ola-maps-config";
+import { ComplaintStatusTracker } from "../../../../components/complaints/complaint-status-tracker";
+import { EvidenceLightbox, EvidenceImageItem } from "../../../../components/evidence/evidence-lightbox";
 import { StatusBadge } from "../../../../components/ui/status-badge";
 import { PriorityBadge } from "../../../../components/ui/priority-badge";
-
-const OlaMap = dynamic(
-  () => import("../../../../components/maps/ola-map").then((mod) => mod.OlaMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-[280px] rounded-2xl border border-border bg-card/40 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-        <span>Loading Ola Map location...</span>
-      </div>
-    ),
-  }
-);
+import { PageHeader } from "../../../../components/ui/page-header";
+import { useToast } from "../../../../components/ui/toast-context";
 import {
   ArrowLeft,
   Calendar,
@@ -32,15 +24,26 @@ import {
   AlertTriangle,
   FileText,
   Star,
-  Send,
   Loader2,
-  ShieldAlert,
+  ExternalLink,
   ImageIcon,
-  User,
-  Building2,
   ZoomIn,
+  AlertCircle,
+  Building2,
+  User,
 } from "lucide-react";
-import { EvidenceLightbox, EvidenceImageItem } from "../../../../components/evidence/evidence-lightbox";
+
+const OlaMap = dynamic(
+  () => import("../../../../components/maps/ola-map").then((mod) => mod.OlaMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-[280px] rounded-2xl border border-border bg-secondary/40 flex items-center justify-center text-xs text-muted-foreground">
+        Loading Map View...
+      </div>
+    ),
+  }
+);
 
 export default function CitizenComplaintDetailPage({
   params,
@@ -49,49 +52,57 @@ export default function CitizenComplaintDetailPage({
 }) {
   const resolvedParams = use(params);
   const complaintId = resolvedParams.id;
+  const { toast } = useToast();
 
   const [complaint, setComplaint] = useState<any | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [viewUrls, setViewUrls] = useState<Record<string, string>>({});
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshImageUrl = async (key: string) => {
-    try {
-      const res = await fetch(`/api/v1/storage/view-url?objectKey=${encodeURIComponent(key)}`);
-      const viewJson = await res.json();
-      if (viewJson.success && viewJson.data?.viewUrl) {
-        setViewUrls((prev) => ({
-          ...prev,
-          [key]: viewJson.data.viewUrl,
-        }));
-      }
-    } catch {
-      // Ignored
-    }
-  };
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  // Feedback form state
-  const [rating, setRating] = useState<number>(5);
+  // Feedback state
+  const [rating, setRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+
+  const refreshImageUrl = async (objectKey: string) => {
+    try {
+      const res = await fetch(
+        `/api/v1/storage/view-url?objectKey=${encodeURIComponent(objectKey)}`
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data?.viewUrl) {
+          setViewUrls((prev) => ({
+            ...prev,
+            [objectKey]: json.data.viewUrl,
+          }));
+        }
+      }
+    } catch {
+      // Ignore background URL fetch error
+    }
+  };
 
   useEffect(() => {
     async function loadComplaintDetails() {
       setIsLoading(true);
       setError(null);
-
       try {
-        const res = await fetch(`/api/v1/complaints/${complaintId}`);
+        const res = await fetch(`/api/v1/complaints/${complaintId}`, {
+          credentials: "include",
+        });
         if (!res.ok) {
           throw new Error(
             res.status === 404
-              ? "Complaint not found"
-              : "Failed to load complaint details"
+              ? "Report not found"
+              : `Failed to load details (${res.status})`
           );
         }
 
@@ -102,32 +113,41 @@ export default function CitizenComplaintDetailPage({
           setComplaint(comp);
           setHistory(hist);
 
-          // Populate existing or resolve pre-signed view URLs for evidence images
-          const initialUrls: Record<string, string> = {};
-          if (comp.evidence && comp.evidence.length > 0) {
-            for (const item of comp.evidence) {
-              const key = item.objectKey || item.key;
-              if (item.url) {
-                initialUrls[key] = item.url;
-              } else if (key) {
-                fetch(`/api/v1/storage/view-url?objectKey=${encodeURIComponent(key)}`)
-                  .then((r) => r.json())
-                  .then((viewJson) => {
-                    if (viewJson.success && viewJson.data?.viewUrl) {
-                      setViewUrls((prev) => ({
-                        ...prev,
-                        [key]: viewJson.data.viewUrl,
-                      }));
-                    }
-                  })
-                  .catch(() => {});
-              }
+          // Populate direct pre-signed URLs from server
+          const initialMap: Record<string, string> = {};
+          const allEv = [
+            ...(comp.evidence || []),
+            ...(comp.resolutionEvidence || []),
+            ...hist.flatMap((h: any) => h.evidence || []),
+          ];
+          for (const ev of allEv) {
+            const k = ev.objectKey || ev.key;
+            if (k && ev.url) {
+              initialMap[k] = ev.url;
             }
           }
-          setViewUrls((prev) => ({ ...prev, ...initialUrls }));
+          setViewUrls((prev) => ({ ...prev, ...initialMap }));
+
+          // Fetch pre-signed URLs for citizen evidence
+          const evidenceList = comp.evidence || [];
+          for (const ev of evidenceList) {
+            const key = ev.objectKey || ev.key;
+            if (key && !initialMap[key]) {
+              refreshImageUrl(key);
+            }
+          }
+
+          // Fetch resolution evidence URLs
+          const resEvidenceList = comp.resolutionEvidence || [];
+          for (const ev of resEvidenceList) {
+            const key = ev.objectKey || ev.key;
+            if (key && !initialMap[key]) {
+              refreshImageUrl(key);
+            }
+          }
         }
       } catch (err: any) {
-        setError(err.message || "Failed to load complaint details");
+        setError(err.message || "Failed to load report");
       } finally {
         setIsLoading(false);
       }
@@ -136,419 +156,396 @@ export default function CitizenComplaintDetailPage({
     loadComplaintDetails();
   }, [complaintId]);
 
-  // Citizen confirms resolution and provides feedback
-  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+  const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmittingFeedback(true);
-
     try {
-      const res = await fetch(`/api/v1/complaints/${complaintId}/close`, {
+      const res = await fetch(`/api/v1/complaints/${complaintId}/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feedbackRating: rating,
-          feedbackNotes: feedbackComment.trim() || undefined,
-        }),
+        body: JSON.stringify({ rating, comment: feedbackComment }),
       });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error?.message || "Failed to submit feedback");
+      if (res.ok) {
+        setFeedbackSuccess(true);
+        toast.success("Feedback Submitted", "Thank you for rating the resolution quality.");
+      } else {
+        toast.error("Feedback Failed", "Unable to record your rating at this time.");
       }
-
-      setFeedbackSuccess(true);
-      setComplaint((prev: any) => ({
-        ...prev,
-        status: ComplaintStatus.CLOSED,
-        feedbackRating: rating,
-        feedbackNotes: feedbackComment,
-      }));
-
-      // Append local history entry
-      setHistory((prev) => [
-        {
-          complaintId,
-          status: ComplaintStatus.CLOSED,
-          actorRole: "CITIZEN",
-          notes: `Citizen verified resolution. Rating: ${rating}/5 stars. ${
-            feedbackComment ? `Notes: "${feedbackComment}"` : ""
-          }`,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
-    } catch (err: any) {
-      alert(err.message || "Failed to submit feedback");
+    } catch {
+      toast.error("Feedback Error", "Network error submitting feedback.");
     } finally {
       setIsSubmittingFeedback(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <CitizenShell>
-        <div className="py-24 flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#d95d39] animate-spin" />
-          <span className="text-xs text-muted-foreground">
-            Loading incident lifecycle & audit trail...
-          </span>
-        </div>
-      </CitizenShell>
-    );
-  }
+  const citizenEvidenceItems: EvidenceImageItem[] = (complaint?.evidence || []).map((e: any, idx: number) => ({
+    key: e.objectKey || e.key || `cit-${idx}`,
+    objectKey: e.objectKey || e.key,
+    url: (e.objectKey ? viewUrls[e.objectKey] : null) || (e.key ? viewUrls[e.key] : null) || e.url || "",
+    originalName: e.filename || e.originalName || "Citizen Evidence",
+    uploadedAt: e.uploadedAt,
+  }));
 
-  if (error || !complaint) {
-    return (
-      <CitizenShell>
-        <div className="max-w-xl mx-auto py-16 flex flex-col items-center text-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center text-destructive">
-            <AlertTriangle className="w-7 h-7" />
-          </div>
-          <h2 className="font-display text-xl font-bold text-foreground">Complaint Not Found</h2>
-          <p className="text-xs text-muted-foreground max-w-sm">
-            {error || "The requested incident record does not exist or has been archived."}
-          </p>
-          <Link
-            href="/citizen/complaints"
-            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-xs font-semibold text-foreground hover:bg-secondary transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Return to My Complaints</span>
-          </Link>
-        </div>
-      </CitizenShell>
-    );
-  }
+  const resolutionEvidenceItems: EvidenceImageItem[] = (complaint?.resolutionEvidence || []).map((e: any, idx: number) => ({
+    key: e.objectKey || e.key || `res-${idx}`,
+    objectKey: e.objectKey || e.key,
+    url: (e.objectKey ? viewUrls[e.objectKey] : null) || (e.key ? viewUrls[e.key] : null) || e.url || "",
+    originalName: e.filename || e.originalName || "Resolution Evidence",
+    uploadedAt: e.uploadedAt,
+  }));
 
-  const categoryColor = CATEGORY_COLORS[complaint.category as ComplaintCategory] || "#94a3b8";
-  const isResolved = complaint.status === ComplaintStatus.RESOLVED;
-  const isClosed = complaint.status === ComplaintStatus.CLOSED;
-  const isRejected = complaint.status === ComplaintStatus.REJECTED;
-
-  // Build lightbox items from evidence array
-  const rawEvidence = complaint.evidence || [];
-  const lightboxItems: EvidenceImageItem[] = rawEvidence.map((item: any, idx: number) => {
-    const key = item.objectKey || item.key || "";
-    return {
-      key,
-      url: viewUrls[key] || item.url || "",
-      originalName: item.originalName || (key ? key.split("/").pop() : `Evidence_${idx + 1}.jpg`),
-      size: item.size,
-      mimeType: item.mimeType || "image/jpeg",
-      uploadedAt: item.uploadedAt || complaint.createdAt,
-    };
-  });
+  const allEvidenceItems: EvidenceImageItem[] = [...citizenEvidenceItems, ...resolutionEvidenceItems];
 
   return (
-    <CitizenShell>
-      <div className="space-y-6 max-w-5xl mx-auto">
-        {/* Back Link */}
-        <Link
-          href="/citizen/complaints"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-[#d95d39] transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to My Complaints</span>
-        </Link>
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Back Button */}
+      <Link
+        href="/citizen/complaints"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition min-h-[44px]"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to My Reports</span>
+      </Link>
 
-        {/* Header Card */}
-        <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold text-[#d95d39]">
-                {complaint.referenceNumber || complaintId}
-              </span>
-              <StatusBadge status={complaint.status} />
-              {complaint.priority && <PriorityBadge priority={complaint.priority} />}
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: categoryColor }}
-              />
-              <span className="font-semibold text-foreground capitalize">
-                {complaint.category?.replace(/_/g, " ")}
-              </span>
-            </div>
-          </div>
-
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
-            {complaint.title}
-          </h1>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground pt-1 border-t border-border">
-            <span className="flex items-center gap-1.5 font-mono">
-              <Calendar className="w-3.5 h-3.5" />
-              {complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : "Recently"}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-              {complaint.address || "Location pinned on map"}
-            </span>
-          </div>
+      {isLoading ? (
+        <div className="h-96 rounded-3xl border border-border bg-card flex flex-col items-center justify-center gap-3 shadow-xs">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <span className="text-xs text-muted-foreground">Retrieving report details...</span>
         </div>
-
-        {/* Rejection Alert Banner */}
-        {isRejected && complaint.rejectionReason && (
-          <div className="p-4 rounded-2xl border border-red-500/30 bg-red-500/10 flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-xs font-bold text-red-500 uppercase tracking-wider">
-                Complaint Rejected by Administration
-              </h4>
-              <p className="text-xs text-foreground/90 mt-1 leading-relaxed">
-                {complaint.rejectionReason}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* 2-Column Split: Details & Evidence (7 cols) / Audit Trail (5 cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-7 space-y-6">
-            {/* Description Card */}
-            <div className="p-6 rounded-2xl border border-border bg-card space-y-3">
-              <h3 className="font-display text-sm font-bold text-foreground">Issue Description</h3>
-              <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                {complaint.description}
-              </p>
-            </div>
-
-            {/* Location & Ola Map Card */}
-            <div className="p-6 rounded-2xl border border-border bg-card space-y-3">
-              <h3 className="font-display text-sm font-bold text-foreground">Location & Coordinates</h3>
-              <div className="space-y-1 text-xs">
-                <p className="font-semibold text-foreground">{complaint.address}</p>
-                {complaint.landmark && (
-                  <p className="text-muted-foreground">Landmark: {complaint.landmark}</p>
-                )}
-                {complaint.location?.coordinates && (
-                  <p className="font-mono text-xs font-semibold text-[#d95d39]">
-                    GeoJSON: [{complaint.location.coordinates[0].toFixed(5)}, {complaint.location.coordinates[1].toFixed(5)}]
-                  </p>
-                )}
+      ) : error || !complaint ? (
+        <div className="p-8 rounded-3xl border border-destructive/20 bg-destructive/10 text-center space-y-3">
+          <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
+          <h2 className="text-base font-bold text-foreground">Report Unavailable</h2>
+          <p className="text-xs text-muted-foreground">{error || "Unable to locate this report."}</p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {/* Main Result Card */}
+          <div className="bg-card rounded-3xl border border-border shadow-xl shadow-primary/5 overflow-hidden">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-center text-white">
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-white/20 rounded-2xl mb-3 backdrop-blur-xs shadow-inner">
+                <FileText className="w-7 h-7 text-white" />
               </div>
-
-              {complaint.location?.coordinates && (
-                <div className="rounded-xl overflow-hidden border border-border mt-2">
-                  <OlaMap
-                    initialCenter={complaint.location.coordinates}
-                    initialZoom={15}
-                    complaints={[
-                      {
-                        id: complaint._id || complaint.id,
-                        referenceNumber: complaint.referenceNumber,
-                        title: complaint.title,
-                        category: complaint.category,
-                        status: complaint.status,
-                        location: complaint.location,
-                        address: complaint.address,
-                      },
-                    ]}
-                    className="w-full h-[240px] rounded-none border-none"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* S3 Evidence Gallery */}
-            <div className="p-6 rounded-2xl border border-border bg-card space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold text-foreground">
-                  Attached Evidence ({rawEvidence.length})
-                </h3>
-                <span className="text-[11px] font-mono text-muted-foreground">Click to inspect</span>
+              <h1 className="text-2xl font-bold tracking-tight">{complaint.title}</h1>
+              <p className="opacity-90 text-xs font-semibold mt-1">
+                Reference ID: {complaint.referenceNumber || complaintId}
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <StatusBadge status={complaint.status} />
+                <PriorityBadge priority={complaint.priority} />
               </div>
-
-              {rawEvidence.length === 0 ? (
-                <p className="text-xs italic text-muted-foreground">No photos attached to this incident.</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {rawEvidence.map((item: any, i: number) => {
-                    const key = item.objectKey || item.key || "";
-                    const url = viewUrls[key] || item.url;
-                    const filename = item.originalName || (key ? key.split("/").pop() : `Evidence_${i + 1}.jpg`);
-
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          setActiveImageIndex(i);
-                          setLightboxOpen(true);
-                        }}
-                        className="rounded-xl overflow-hidden border border-border aspect-square bg-secondary/30 relative group cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#d95d39] text-left transition"
-                        title={`Click to view ${filename}`}
-                      >
-                        {url ? (
-                          <>
-                            <img
-                              src={url}
-                              alt={filename}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                              loading="lazy"
-                              onError={() => {
-                                if (key) {
-                                  refreshImageUrl(key);
-                                }
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2 text-center">
-                              <ZoomIn className="w-5 h-5 text-[#d95d39]" />
-                              <span className="text-[10px] font-semibold text-foreground truncate max-w-full">
-                                {filename}
-                              </span>
-                              <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                                [S3 VERIFIED]
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center gap-1 p-2 text-center text-muted-foreground h-full">
-                            <Loader2 className="w-4 h-4 text-[#d95d39] animate-spin" />
-                            <span className="text-[10px] font-mono truncate">Loading...</span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
-            {/* Citizen Feedback & Closure Card (when RESOLVED) */}
-            {isResolved && !feedbackSuccess && (
-              <div className="p-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-4 shadow-sm">
-                <div>
-                  <h3 className="font-display text-base font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                    <Star className="w-4 h-4 fill-emerald-500 text-emerald-500" />
-                    <span>Confirm Resolution & Close Ticket</span>
+            {/* Details Grid */}
+            <div className="p-6 sm:p-10 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Left Column: Submission Details */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Submission Details
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Your feedback ensures municipal department officers maintain high quality and accountability.
-                  </p>
+                  <div className="bg-secondary/40 p-6 rounded-2xl space-y-3.5 border border-border text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Category:</span>
+                      <span className="font-semibold text-foreground capitalize">
+                        {complaint.category?.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Reported On:</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(complaint.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Coordinates:</span>
+                      <span className="font-bold text-primary">
+                        [{complaint.location?.coordinates?.[0]?.toFixed(4)}, {complaint.location?.coordinates?.[1]?.toFixed(4)}]
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-border">
+                      <span className="text-muted-foreground block mb-1">Street Address:</span>
+                      <span className="font-medium text-foreground leading-relaxed block">
+                        {complaint.address || "No address entered"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <form onSubmit={handleFeedbackSubmit} className="space-y-4">
-                  <div className="flex items-center gap-1.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setRating(star)}
-                        className={`p-1 transition-transform hover:scale-110 ${
-                          rating >= star ? "text-amber-500" : "opacity-30"
-                        }`}
-                      >
-                        <Star className="w-5 h-5 fill-current" />
-                      </button>
-                    ))}
-                    <span className="text-xs font-mono font-semibold text-foreground ml-2">
-                      {rating} / 5 Rating
+                {/* Right Column: Assigned Team & Response Time */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Assigned Team & Target Time
+                  </h3>
+                  <div className="bg-primary/5 p-6 rounded-2xl space-y-3.5 border border-primary/10 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Assigned Department:</span>
+                      <span className="font-bold text-foreground">
+                        {complaint.assignedDepartment?.name || "Pending Review"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Field Officer:</span>
+                      <span className="font-bold text-foreground">
+                        {complaint.assignedOfficer?.name || "Will be assigned shortly"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Target Resolution Time:</span>
+                      <span className="font-bold text-primary">
+                        {complaint.targetResolutionHours ? `${complaint.targetResolutionHours} hours` : "Standard 48h"}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-primary/10">
+                      <span className="text-xs font-semibold py-1 px-3 rounded-full bg-primary/10 text-primary inline-block">
+                        Active In City Queue
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description Body */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                  Issue Description
+                </h3>
+                <div className="p-5 rounded-2xl bg-card border border-border text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                  {complaint.description}
+                </div>
+              </div>
+
+              {/* Map Location View */}
+              {complaint.location && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-primary" />
+                      <span>Incident Location</span>
+                    </h3>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      [{complaint.location.coordinates?.[0]?.toFixed(4)}, {complaint.location.coordinates?.[1]?.toFixed(4)}]
                     </span>
                   </div>
+                  <div className="rounded-3xl border border-border overflow-hidden shadow-xs h-64">
+                    <OlaMap
+                      initialCenter={complaint.location.coordinates}
+                      initialZoom={15}
+                      complaints={[
+                        {
+                          ...complaint,
+                          id: complaint._id || complaint.id || complaintId,
+                          referenceNumber: complaint.referenceNumber || String(complaintId).slice(-6).toUpperCase(),
+                          title: complaint.title || "Incident Location",
+                          description: complaint.description,
+                          category: complaint.category || ComplaintCategory.OTHER,
+                          status: complaint.status || ComplaintStatus.SUBMITTED,
+                          priority: complaint.priority,
+                          location: complaint.location,
+                          address: complaint.address || "Reported Location",
+                          createdAt: complaint.createdAt,
+                        },
+                      ]}
+                      selectedComplaintId={complaint._id || complaint.id || complaintId}
+                      className="w-full h-full"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 px-1">
+                    <p className="truncate flex items-center gap-1.5 max-w-[70%]">
+                      <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="truncate">{complaint.address || "Reported Location"}</span>
+                    </p>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${complaint.location.coordinates?.[1]},${complaint.location.coordinates?.[0]}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary font-semibold hover:underline shrink-0 flex items-center gap-1 min-h-[44px]"
+                    >
+                      <span>Open in Maps</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
 
-                  <input
-                    type="text"
-                    value={feedbackComment}
-                    onChange={(e) => setFeedbackComment(e.target.value)}
-                    placeholder="Optional feedback on resolution speed or repair quality..."
-                    className="w-full border border-border rounded-xl px-3.5 py-2 text-xs outline-none bg-background text-foreground focus:border-[#d95d39]"
-                  />
+              {/* Citizen Photo Evidence Gallery */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-blue-600" />
+                    <span>Citizen Photo Evidence</span>
+                  </h3>
+                  {citizenEvidenceItems.length > 0 && (
+                    <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-2.5 py-0.5 rounded-full border border-border">
+                      {citizenEvidenceItems.length} photo{citizenEvidenceItems.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
 
-                  <div className="flex justify-end">
+                {citizenEvidenceItems.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No evidence photos attached with report.</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {citizenEvidenceItems.map((item, idx) => (
+                      <div
+                        key={item.key || idx}
+                        onClick={() => {
+                          setActiveImageIndex(idx);
+                          setLightboxOpen(true);
+                        }}
+                        className="relative aspect-video rounded-2xl overflow-hidden border border-border bg-secondary cursor-pointer group hover:border-primary/50 transition"
+                        title="Click to zoom photo in Lightbox"
+                      >
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.originalName || "Citizen Evidence"}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                            <ImageIcon className="w-6 h-6" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                          <ZoomIn className="w-5 h-5" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Officer Resolution Photo Evidence */}
+              {(resolutionEvidenceItems.length > 0 || complaint.resolvedAt || [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED].includes(complaint.status)) && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-emerald-600" />
+                      <span>Officer Resolution Proof Evidence ({resolutionEvidenceItems.length})</span>
+                    </h3>
+                    {resolutionEvidenceItems.length > 0 && (
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        Verified Work Proof ({resolutionEvidenceItems.length})
+                      </span>
+                    )}
+                  </div>
+
+                  {resolutionEvidenceItems.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No resolution photos attached by field staff.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {resolutionEvidenceItems.map((item, idx) => (
+                        <div
+                          key={item.key || idx}
+                          onClick={() => {
+                            setActiveImageIndex(citizenEvidenceItems.length + idx);
+                            setLightboxOpen(true);
+                          }}
+                          className="relative aspect-video rounded-2xl overflow-hidden border border-emerald-500/30 bg-emerald-500/5 cursor-pointer group hover:border-emerald-500 transition"
+                          title="Click to zoom resolution proof in Lightbox"
+                        >
+                          {item.url ? (
+                            <img
+                              src={item.url}
+                              alt={item.originalName || "Officer Resolution Evidence"}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                              <ImageIcon className="w-6 h-6" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <ZoomIn className="w-5 h-5" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Status Timeline */}
+              <div className="pt-4 border-t border-border">
+                <ComplaintStatusTracker
+                  currentStatus={complaint.status}
+                  history={history}
+                  viewUrls={viewUrls}
+                  resolutionEvidence={complaint.resolutionEvidence}
+                  resolutionRemarks={complaint.resolutionRemarks}
+                  resolvedAt={complaint.resolvedAt}
+                  onImageClick={(url) => {
+                    const idx = allEvidenceItems.findIndex((e) => {
+                      const k = e.objectKey || e.key;
+                      const u = (k ? viewUrls[k] : null) || e.url;
+                      return u === url || e.url === url;
+                    });
+                    if (idx !== -1) {
+                      setActiveImageIndex(idx);
+                      setLightboxOpen(true);
+                    } else {
+                      window.open(url, "_blank");
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Citizen Feedback Form if Resolved */}
+              {complaint.status === ComplaintStatus.RESOLVED && !feedbackSuccess && (
+                <div className="p-6 rounded-3xl border border-primary/20 bg-primary/5 space-y-4">
+                  <h3 className="text-sm font-bold text-foreground">Rate Repair Quality</h3>
+                  <p className="text-xs text-muted-foreground">
+                    How satisfied are you with the speed and quality of this repair?
+                  </p>
+                  <form onSubmit={handleSubmitFeedback} className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setRating(s)}
+                          className="p-1 text-amber-400 hover:scale-110 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          aria-label={`Rate ${s} stars out of 5`}
+                        >
+                          <Star
+                            className={`w-6 h-6 ${
+                              s <= rating ? "fill-amber-400" : "fill-none text-muted-foreground/40"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={feedbackComment}
+                      onChange={(e) => setFeedbackComment(e.target.value)}
+                      placeholder="Optional comments on how the repair was handled..."
+                      rows={3}
+                      className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-xs outline-none focus:ring-2 focus:ring-primary text-foreground"
+                    />
                     <button
                       type="submit"
                       disabled={isSubmittingFeedback}
-                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-sm transition disabled:opacity-50"
+                      className="px-6 py-2.5 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition disabled:opacity-50 min-h-[44px]"
                     >
-                      {isSubmittingFeedback ? "Closing..." : "Confirm & Close Ticket"}
+                      {isSubmittingFeedback ? "Submitting..." : "Submit Rating"}
                     </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {isClosed && (
-              <div className="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                <div>
-                  <h4 className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                    Incident Closed & Citizen Verified
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Rating: {complaint.feedbackRating || 5}/5 stars &bull; {complaint.feedbackNotes || "Resolution confirmed by citizen."}
-                  </p>
+                  </form>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column: Immutable Status Audit Trail (5 cols) */}
-          <div className="lg:col-span-5 p-6 rounded-2xl border border-border bg-card space-y-4">
-            <h3 className="font-display text-sm font-bold text-foreground">
-              Immutable Status Audit Trail
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Cryptographically timestamped lifecycle transitions stored in MongoDB ledger.
-            </p>
-
-            <div className="space-y-4 pl-3 border-l-2 border-border mt-2">
-              {history.length === 0 ? (
-                <div className="relative pl-4 space-y-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#d95d39] border-2 border-background absolute -left-[18px] top-1" />
-                  <StatusBadge status={complaint?.status} />
-                  <p className="text-xs font-medium text-foreground">Initial Submission</p>
-                  <p className="text-[11px] font-mono text-muted-foreground">
-                    {complaint?.createdAt ? new Date(complaint.createdAt).toLocaleString() : ""}
-                  </p>
-                </div>
-              ) : (
-                history.map((item, idx) => {
-                  const itemStatus = item.toStatus || item.status || complaint?.status;
-                  const itemNotes = item.remarks || item.notes;
-                  const actorText = item.actorId?.name
-                    ? `${item.actorId.name} (${item.actorId.role || item.actorRole || "Staff"})`
-                    : item.actorRole || "System";
-
-                  return (
-                    <div key={idx} className="relative pl-4 space-y-1">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#d95d39] border-2 border-background absolute -left-[18px] top-1" />
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <StatusBadge status={itemStatus} />
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {item.createdAt
-                            ? new Date(item.createdAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : ""}
-                        </span>
-                      </div>
-                      {itemNotes && (
-                        <p className="text-xs text-foreground/90 leading-snug">{itemNotes}</p>
-                      )}
-                      <p className="text-[10px] font-mono text-muted-foreground">
-                        Actor: {actorText}
-                      </p>
-                    </div>
-                  );
-                })
               )}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Evidence Lightbox Modal */}
-      {lightboxItems.length > 0 && (
-        <EvidenceLightbox
-          images={lightboxItems}
-          initialIndex={activeImageIndex}
-          isOpen={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
-        />
       )}
-    </CitizenShell>
+
+      {/* Lightbox */}
+      <EvidenceLightbox
+        images={allEvidenceItems}
+        initialIndex={activeImageIndex}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </div>
   );
 }

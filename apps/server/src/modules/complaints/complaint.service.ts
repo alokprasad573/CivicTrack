@@ -48,4 +48,5 @@ export class ComplaintService {
   public static readonly assign = ComplaintWorkflowService.assign;
   public static readonly startWork = ComplaintWorkflowService.startWork;
   public static readonly resolve = ComplaintWorkflowService.resolve;
+  public static readonly close = ComplaintWorkflowService.close;
 }

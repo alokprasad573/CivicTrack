@@ -152,7 +152,7 @@ export function NavigationPanel({
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold font-mono text-primary">
+                <span className="text-2xl font-bold text-primary">
                   {formatDistance(remainingDistanceMeters)}
                 </span>
                 <span className="text-xs text-muted-foreground">

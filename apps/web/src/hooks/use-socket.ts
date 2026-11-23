@@ -11,12 +11,19 @@ export function useSocket() {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const listenersRef = useRef<Map<string, Set<(...args: any[]) => void>>>(new Map());
 
   useEffect(() => {
     let active = true;
 
     async function initSocket() {
-      if (!isLoaded || !isSignedIn) {
+      const isStaffPortal =
+        typeof window !== "undefined" &&
+        (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/officer")) &&
+        !window.location.pathname.includes("/login");
+
+      // For citizen portals, require Clerk sign-in. For staff portals, rely on httpOnly staff JWT cookies.
+      if (!isStaffPortal && (!isLoaded || !isSignedIn)) {
         if (socketRef.current) {
           socketRef.current.disconnect();
           socketRef.current = null;
@@ -26,15 +33,19 @@ export function useSocket() {
       }
 
       try {
-        const token = await getToken();
-        if (!token || !active) return;
+        let token: string | null = null;
+        if (!isStaffPortal) {
+          token = await getToken();
+          if (!token || !active) return;
+        }
 
         if (socketRef.current?.connected) {
           return;
         }
 
         const socket = io(SOCKET_URL, {
-          auth: { token },
+          auth: token ? { token } : undefined,
+          withCredentials: true,
           reconnection: true,
           reconnectionAttempts: 10,
           reconnectionDelay: 1500,
@@ -42,7 +53,15 @@ export function useSocket() {
         });
 
         socket.on("connect", () => {
-          if (active) setIsConnected(true);
+          if (active) {
+            setIsConnected(true);
+            // Re-bind all registered event listeners on connection / reconnection
+            listenersRef.current.forEach((callbacks, event) => {
+              callbacks.forEach((cb) => {
+                socket.on(event, cb);
+              });
+            });
+          }
         });
 
         socket.on("disconnect", () => {
@@ -71,10 +90,23 @@ export function useSocket() {
   }, [isLoaded, isSignedIn, getToken]);
 
   const on = useCallback((event: string, callback: (...args: any[]) => void) => {
+    if (!listenersRef.current.has(event)) {
+      listenersRef.current.set(event, new Set());
+    }
+    listenersRef.current.get(event)!.add(callback);
+
     if (socketRef.current) {
       socketRef.current.on(event, callback);
     }
+
     return () => {
+      const callbacks = listenersRef.current.get(event);
+      if (callbacks) {
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          listenersRef.current.delete(event);
+        }
+      }
       if (socketRef.current) {
         socketRef.current.off(event, callback);
       }

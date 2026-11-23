@@ -17,6 +17,10 @@ import {
   Crosshair,
   Loader2,
   Navigation,
+  Search,
+  Building,
+  Compass,
+  CheckCircle2,
 } from "lucide-react";
 
 export interface LocationPickerProps {
@@ -25,6 +29,17 @@ export interface LocationPickerProps {
   onChange: (location: GeoJsonPoint, suggestedAddress?: string) => void;
   className?: string;
 }
+
+const POPULAR_ZONES = [
+  { label: "Indiranagar", coords: [77.6412, 12.9784] as Coordinates, address: "100 Feet Rd, Indiranagar, Bengaluru, Karnataka" },
+  { label: "Koramangala", coords: [77.6245, 12.9352] as Coordinates, address: "80 Feet Rd, Koramangala 4th Block, Bengaluru, Karnataka" },
+  { label: "MG Road / CBD", coords: [77.5946, 12.9716] as Coordinates, address: "MG Road, Central Business District, Bengaluru, Karnataka" },
+  { label: "Whitefield", coords: [77.7499, 12.9698] as Coordinates, address: "ITPB Main Rd, Whitefield, Bengaluru, Karnataka" },
+  { label: "Jayanagar", coords: [77.5838, 12.9308] as Coordinates, address: "4th Block, Jayanagar, Bengaluru, Karnataka" },
+  { label: "HSR Layout", coords: [77.6389, 12.9121] as Coordinates, address: "27th Main Rd, Sector 1, HSR Layout, Bengaluru, Karnataka" },
+  { label: "Malleshwaram", coords: [77.5704, 13.0031] as Coordinates, address: "Sampige Rd, Malleshwaram, Bengaluru, Karnataka" },
+  { label: "Electronic City", coords: [77.6775, 12.8452] as Coordinates, address: "Hosur Rd, Phase 1, Electronic City, Bengaluru, Karnataka" },
+];
 
 function isValidCoordinates(coords: unknown): coords is Coordinates {
   return (
@@ -48,11 +63,6 @@ function isDefaultCoordinates(coords: Coordinates): boolean {
   );
 }
 
-/**
- * Child overlay within OlaMap that manages the draggable complaint pin marker,
- * the dedicated CurrentLocationMarker (pulsing radar beacon at live GPS position),
- * and automatic camera centering.
- */
 interface LocationPickerMapOverlayProps {
   map: any | null;
   isLoaded: boolean;
@@ -86,7 +96,7 @@ function LocationPickerMapOverlay({
     }
   }, [map, isLoaded, onMapReady]);
 
-  // Auto-center camera on citizen's live GPS coordinates once resolved
+  // Auto-center camera on citizen's live coordinates once resolved
   useEffect(() => {
     if (!isLoaded || !map) return;
     if (hasAutoCenteredCameraRef.current) return;
@@ -118,10 +128,10 @@ function LocationPickerMapOverlay({
     let isDisposed = false;
 
     getMapLibre()
-      .then(({ Marker, Popup }) => {
+      .then(({ Marker }) => {
         if (isDisposed || !map) return;
 
-        // Custom teardrop pin element with dark core and teal halo
+        // Custom teardrop pin element with dark core and blue gradient halo
         const el = document.createElement("div");
         el.className = "civic-complaint-pin-marker";
         el.style.width = "36px";
@@ -143,9 +153,9 @@ function LocationPickerMapOverlay({
               height: 32px;
               border-radius: 50% 50% 50% 0;
               transform: rotate(-45deg);
-              background: #00e5c3;
+              background: #2563eb;
               border: 3px solid #ffffff;
-              box-shadow: 0 4px 16px rgba(0, 229, 195, 0.6), 0 2px 6px rgba(0,0,0,0.5);
+              box-shadow: 0 4px 16px rgba(37, 99, 235, 0.5), 0 2px 6px rgba(0,0,0,0.3);
               display: flex;
               align-items: center;
               justify-content: center;
@@ -154,23 +164,12 @@ function LocationPickerMapOverlay({
                 width: 10px;
                 height: 10px;
                 border-radius: 50%;
-                background: #0f172a;
+                background: #ffffff;
                 transform: rotate(45deg);
               "></div>
             </div>
           </div>
         `;
-
-        const popup = new Popup({
-          offset: 25,
-          closeButton: false,
-          closeOnClick: false,
-          className: "civic-pin-popup",
-        }).setHTML(`
-          <div style="font-family: system-ui, sans-serif; padding: 4px 8px; color: #f8fafc; background: #0f172a; border-radius: 6px; border: 1px solid rgba(0, 229, 195, 0.4); font-size: 11px; font-weight: 600;">
-            📍 Incident Pin (Drag to Move)
-          </div>
-        `);
 
         const marker = new Marker({
           element: el,
@@ -178,7 +177,6 @@ function LocationPickerMapOverlay({
           anchor: "bottom",
         })
           .setLngLat(selectedCoords)
-          .setPopup(popup)
           .addTo(map);
 
         marker.on("dragstart", () => {
@@ -188,12 +186,16 @@ function LocationPickerMapOverlay({
         marker.on("dragend", () => {
           el.style.cursor = "grab";
           const lngLat = marker.getLngLat();
-          onSelectCoordinates([lngLat.lng, lngLat.lat], true);
+          if (lngLat) {
+            onSelectCoordinates([lngLat.lng, lngLat.lat], true);
+          }
         });
 
         pinMarkerRef.current = marker;
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("MapLibre Marker loader notice:", err);
+      });
 
     return () => {
       isDisposed = true;
@@ -202,7 +204,7 @@ function LocationPickerMapOverlay({
         pinMarkerRef.current = null;
       }
     };
-  }, [isLoaded, map]);
+  }, [isLoaded, map, onSelectCoordinates, selectedCoords]);
 
   // Keep marker position synchronized with selectedCoords state
   useEffect(() => {
@@ -213,13 +215,13 @@ function LocationPickerMapOverlay({
 
   return (
     <>
-      {/* Dedicated Current Location Marker: Cyan/teal pulsing radar ring with accuracy halo */}
+      {/* Dedicated Current Location Marker: Pulsing radar ring with accuracy halo */}
       {isLoaded && map && userCoords && isValidCoordinates(userCoords) && (
         <CurrentLocationMarker
           map={map}
           coords={userCoords}
           accuracy={userAccuracy}
-          label="Your Current Location"
+          label="Your Detected Location"
           isLocating={isTracking}
         />
       )}
@@ -233,17 +235,17 @@ export function LocationPicker({
   onChange,
   className = "w-full",
 }: LocationPickerProps) {
-  // Real GPS Geolocation API tracking
+  // Resilient multi-tier GPS tracking hook
   const {
     coords: userCoords,
     accuracy: userAccuracy,
     isTracking,
     permissionGranted,
+    source,
     error: geoError,
     getCurrentPosition,
   } = useGeolocation(true);
 
-  // Determine initial coordinates: prefer explicit value if not default, else fallback to default Bangalore center
   const initialCoords: Coordinates =
     value && isValidCoordinates(value.coordinates)
       ? value.coordinates
@@ -256,9 +258,12 @@ export function LocationPicker({
   const [manualLng, setManualLng] = useState<string>(String(selectedCoords[0]));
   const [manualLat, setManualLat] = useState<string>(String(selectedCoords[1]));
   const [isLocatingManually, setIsLocatingManually] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
   const hasAutoLocatedRef = useRef(false);
   const hasUserManuallySetRef = useRef(false);
+  const hasInitialAddressPopulatedRef = useRef(false);
   const mapInstanceRef = useRef<any | null>(null);
 
   // Synchronize when value prop updates from parent
@@ -273,22 +278,23 @@ export function LocationPicker({
         setManualLat(String(value.coordinates[1]));
       }
     }
-  }, [value?.coordinates?.[0], value?.coordinates?.[1]]);
+  }, [value?.coordinates]);
 
   // Synchronize address prop
   useEffect(() => {
-    if (address !== undefined) {
+    if (address !== undefined && address !== "") {
       setCurrentAddress(address);
     }
   }, [address]);
 
-  // Reverse geocoding fetcher
+  // Reverse geocoding fetcher with guaranteed fallback address
   const fetchAddressSuggestion = useCallback(
     async (coords: Coordinates) => {
       setIsReverseGeocoding(true);
       try {
         const res = await fetch(
-          `/api/v1/maps/reverse-geocode?lng=${coords[0]}&lat=${coords[1]}`
+          `/api/v1/maps/reverse-geocode?lng=${coords[0]}&lat=${coords[1]}`,
+          { credentials: "include" }
         );
         if (res.ok) {
           const json = await res.json();
@@ -302,14 +308,50 @@ export function LocationPicker({
           }
         }
       } catch {
-        // Network errors silently handled; coordinate data is preserved
+        // Fallback below
       } finally {
         setIsReverseGeocoding(false);
       }
 
-      onChange({ type: "Point", coordinates: coords });
+      // Check if coordinate matches a known zone
+      const matchedZone = POPULAR_ZONES.find(
+        (z) =>
+          Math.abs(z.coords[0] - coords[0]) < 0.02 &&
+          Math.abs(z.coords[1] - coords[1]) < 0.02
+      );
+
+      const generatedAddress = matchedZone
+        ? matchedZone.address
+        : `Near [${coords[1].toFixed(4)}° N, ${coords[0].toFixed(4)}° E], Municipal Ward, Bengaluru`;
+
+      setCurrentAddress(generatedAddress);
+      onChange({ type: "Point", coordinates: coords }, generatedAddress);
     },
     [onChange]
+  );
+
+  // Initial address guarantee: make sure address is never empty on load
+  useEffect(() => {
+    if (!hasInitialAddressPopulatedRef.current) {
+      hasInitialAddressPopulatedRef.current = true;
+      if (!address || address.trim().length < 3) {
+        fetchAddressSuggestion(selectedCoords);
+      }
+    }
+  }, [address, fetchAddressSuggestion, selectedCoords]);
+
+  // Handler for coordinate selection (via map click, pin drag, or manual apply)
+  const handleSelectCoordinates = useCallback(
+    (coords: Coordinates, isUserAction = true) => {
+      if (isUserAction) {
+        hasUserManuallySetRef.current = true;
+      }
+      setSelectedCoords(coords);
+      setManualLng(String(coords[0]));
+      setManualLat(String(coords[1]));
+      fetchAddressSuggestion(coords);
+    },
+    [fetchAddressSuggestion]
   );
 
   // Auto-location & Auto-centering on first GPS detection
@@ -334,28 +376,12 @@ export function LocationPicker({
               essential: true,
               duration: 1200,
             });
-          } catch {
-            // Map may still be loading
-          }
+          } catch {}
         }
       }
       hasAutoLocatedRef.current = true;
     }
   }, [userCoords, value, selectedCoords, fetchAddressSuggestion]);
-
-  // Handler for coordinate selection (via map click, pin drag, or manual apply)
-  const handleSelectCoordinates = useCallback(
-    (coords: Coordinates, isUserAction = true) => {
-      if (isUserAction) {
-        hasUserManuallySetRef.current = true;
-      }
-      setSelectedCoords(coords);
-      setManualLng(String(coords[0]));
-      setManualLat(String(coords[1]));
-      fetchAddressSuggestion(coords);
-    },
-    [fetchAddressSuggestion]
-  );
 
   // Manual Locate Me / Snap Pin to GPS action
   const handleLocateMe = async () => {
@@ -376,9 +402,68 @@ export function LocationPicker({
         }
       }
     } catch (err) {
-      console.warn("GPS location retrieval failed:", err);
+      console.warn("GPS location retrieval warning:", err);
     } finally {
       setIsLocatingManually(false);
+    }
+  };
+
+  // Search by Area or Landmark
+  const handleSearchArea = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    try {
+      // 1. Check local zone presets first
+      const queryLower = searchQuery.toLowerCase().trim();
+      const matched = POPULAR_ZONES.find((z) =>
+        z.label.toLowerCase().includes(queryLower) ||
+        z.address.toLowerCase().includes(queryLower)
+      );
+
+      if (matched) {
+        handleSelectCoordinates(matched.coords, true);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.flyTo({
+            center: matched.coords,
+            zoom: 15,
+            essential: true,
+            duration: 1200,
+          });
+        }
+        setIsSearching(false);
+        return;
+      }
+
+      // 2. Query backend geocode endpoint
+      const res = await fetch(
+        `/api/v1/maps/geocode?query=${encodeURIComponent(searchQuery.trim())}`,
+        { credentials: "include" }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data && json.data.length > 0) {
+          const first = json.data[0];
+          handleSelectCoordinates(first.coordinates, true);
+          if (first.formattedAddress) {
+            setCurrentAddress(first.formattedAddress);
+            onChange({ type: "Point", coordinates: first.coordinates }, first.formattedAddress);
+          }
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.flyTo({
+              center: first.coordinates,
+              zoom: 15,
+              essential: true,
+              duration: 1200,
+            });
+          }
+        }
+      }
+    } catch {
+      // Ignore search error
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -407,18 +492,18 @@ export function LocationPicker({
   };
 
   return (
-    <div className={`flex flex-col gap-3 ${className}`}>
+    <div className={`flex flex-col gap-3 font-sans ${className}`}>
       {/* Top action bar: Header, Locate Me GPS button, and Manual Coordinates toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-primary" />
-          <span className="text-xs font-semibold text-foreground">
-            Complaint Location Pin
+          <span className="text-xs font-bold text-foreground">
+            Incident Map Pin & Location
           </span>
-          {permissionGranted && userCoords && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              GPS Active
+          {userCoords && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{source === "gps" ? "GPS Active" : source === "network" ? "Wi-Fi Located" : "Auto Located"}</span>
             </span>
           )}
         </div>
@@ -428,21 +513,17 @@ export function LocationPicker({
           <button
             type="button"
             onClick={handleLocateMe}
-            disabled={isLocatingManually || isTracking}
-            className="text-xs font-medium text-primary hover:text-primary/90 flex items-center gap-1.5 transition-all bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg border border-primary/25 disabled:opacity-60 shadow-sm"
-            title="Detect live GPS coordinates and snap pin to your location"
+            disabled={isLocatingManually}
+            className="text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 active:scale-95 flex items-center gap-1.5 transition-all px-3 py-1.5 rounded-xl shadow-xs disabled:opacity-60 min-h-[36px]"
+            title="Detect live location and snap pin to your coordinates"
           >
-            {isLocatingManually || isTracking ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            {isLocatingManually ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Crosshair className="w-3.5 h-3.5 text-primary" />
+              <Crosshair className="w-3.5 h-3.5" />
             )}
             <span>
-              {isLocatingManually
-                ? "Acquiring GPS..."
-                : isTracking && !userCoords
-                ? "Detecting GPS..."
-                : "Locate My GPS"}
+              {isLocatingManually ? "Acquiring Location..." : "Locate My Current GPS"}
             </span>
           </button>
 
@@ -450,27 +531,77 @@ export function LocationPicker({
           <button
             type="button"
             onClick={() => setIsManualMode(!isManualMode)}
-            className="text-xs font-medium text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors px-2 py-1 rounded-lg border border-border/60 hover:border-border"
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 transition px-2.5 py-1.5 rounded-xl border border-border bg-card hover:bg-secondary min-h-[36px]"
           >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>{isManualMode ? "Use Interactive Map" : "Manual Coordinates"}</span>
+            <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+            <span>{isManualMode ? "Map View" : "Enter Coords"}</span>
           </button>
         </div>
       </div>
 
+      {/* Search Neighborhood / Landmark Bar */}
+      {!isManualMode && (
+        <div className="space-y-2">
+          <form onSubmit={handleSearchArea} className="relative flex items-center">
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search area, colony or landmark (e.g. Indiranagar, MG Road, Whitefield)..."
+              className="w-full bg-background border border-border rounded-xl pl-10 pr-24 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
+            />
+            <button
+              type="submit"
+              disabled={isSearching || !searchQuery.trim()}
+              className="absolute right-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-[11px] disabled:opacity-50 transition"
+            >
+              {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : "Search"}
+            </button>
+          </form>
+
+          {/* Quick Ward / Zone Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-muted-foreground">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+              <Compass className="w-3 h-3" /> Quick Zones:
+            </span>
+            {POPULAR_ZONES.map((zone) => (
+              <button
+                key={zone.label}
+                type="button"
+                onClick={() => {
+                  handleSelectCoordinates(zone.coords, true);
+                  if (mapInstanceRef.current) {
+                    mapInstanceRef.current.flyTo({
+                      center: zone.coords,
+                      zoom: 15,
+                      essential: true,
+                      duration: 1200,
+                    });
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-[11px] font-semibold text-foreground whitespace-nowrap transition shadow-2xs"
+              >
+                {zone.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Manual Input Fallback */}
       {isManualMode ? (
-        <div className="p-4 rounded-xl border border-border bg-card/60 flex flex-col gap-3">
-          <div className="flex items-start gap-2 text-xs text-muted-foreground">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-4 sm:p-5 rounded-2xl border border-border bg-card flex flex-col gap-4 shadow-xs">
+          <div className="flex items-start gap-2.5 text-xs text-muted-foreground bg-primary/5 p-3 rounded-xl border border-primary/10">
+            <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <span>
-              Enter precise GPS coordinates if you prefer manual specification or are filing a complaint remotely.
+              Enter precise GPS coordinates to position the incident pin manually or when filing a complaint remotely.
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground block">
                 Longitude (-180 to 180)
               </label>
               <input
@@ -479,11 +610,11 @@ export function LocationPicker({
                 value={manualLng}
                 onChange={(e) => setManualLng(e.target.value)}
                 placeholder="77.5946"
-                className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
+                className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground block">
                 Latitude (-90 to 90)
               </label>
               <input
@@ -492,63 +623,68 @@ export function LocationPicker({
                 value={manualLat}
                 onChange={(e) => setManualLat(e.target.value)}
                 placeholder="12.9716"
-                className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
+                className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-2 border-t border-border">
             <button
               type="button"
               onClick={handleLocateMe}
-              className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5"
             >
-              <Navigation className="w-3 h-3" />
-              <span>Fill with My GPS Coordinates</span>
+              <Navigation className="w-3.5 h-3.5" />
+              <span>Autofill with Detected Location</span>
             </button>
 
             <button
               type="button"
               onClick={handleManualApply}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90 transition-all shadow-md"
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-xl hover:bg-primary/90 transition shadow-xs active:scale-95"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Update Pin Coordinates</span>
+              <span>Apply Coordinates</span>
             </button>
           </div>
         </div>
       ) : (
-        /* Interactive Ola Map Picker with Auto-Centering and Pulsing Radar Marker */
-        <OlaMap
-          initialCenter={selectedCoords}
-          initialZoom={15}
-          onMapClick={(coords) => handleSelectCoordinates(coords, true)}
-          className="w-full h-[340px] rounded-xl"
-        >
-          {({ map, isLoaded }) => (
-            <LocationPickerMapOverlay
-              map={map}
-              isLoaded={isLoaded}
-              selectedCoords={selectedCoords}
-              userCoords={userCoords}
-              userAccuracy={userAccuracy}
-              isTracking={isTracking}
-              hasUserManuallySetRef={hasUserManuallySetRef}
-              onSelectCoordinates={handleSelectCoordinates}
-              onMapReady={(m) => {
-                mapInstanceRef.current = m;
-              }}
-            />
-          )}
-        </OlaMap>
+        /* Interactive Ola Map Picker with Auto-Centering and Pulsing Marker */
+        <div className="relative w-full rounded-2xl overflow-hidden border border-border shadow-xs">
+          <OlaMap
+            initialCenter={selectedCoords}
+            initialZoom={15}
+            onMapClick={(coords) => handleSelectCoordinates(coords, true)}
+            onMapLoaded={(m) => {
+              mapInstanceRef.current = m;
+            }}
+            className="w-full h-[360px]"
+          >
+            {({ map, isLoaded }) => (
+              <LocationPickerMapOverlay
+                map={map}
+                isLoaded={isLoaded}
+                selectedCoords={selectedCoords}
+                userCoords={userCoords}
+                userAccuracy={userAccuracy}
+                isTracking={isTracking}
+                hasUserManuallySetRef={hasUserManuallySetRef}
+                onSelectCoordinates={handleSelectCoordinates}
+                onMapReady={(m) => {
+                  mapInstanceRef.current = m;
+                }}
+              />
+            )}
+          </OlaMap>
+        </div>
       )}
 
-      {/* Location Details Footer: Pin Coordinates, Live GPS Radar Readout, and Address */}
-      <div className="flex flex-col gap-2 p-3.5 rounded-xl border border-border/70 bg-card/40 shadow-sm">
+      {/* Location Details Footer */}
+      <div className="flex flex-col gap-2 p-3.5 sm:p-4 rounded-2xl border border-border bg-card shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground font-medium">Incident Pin:</span>
-            <span className="font-mono text-primary font-bold">
+            <span className="text-muted-foreground font-semibold">Pinned Incident Location:</span>
+            <span className="text-primary font-bold bg-primary/10 px-2.5 py-0.5 rounded-lg border border-primary/20">
               [{selectedCoords[0].toFixed(5)}, {selectedCoords[1].toFixed(5)}]
             </span>
           </div>
@@ -556,13 +692,13 @@ export function LocationPicker({
           {userCoords && isValidCoordinates(userCoords) && (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-[#00e5c3] animate-pulse" />
-                <span>My GPS:</span>
-                <span className="font-mono text-foreground font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Detected Location:</span>
+                <span className="text-foreground font-medium">
                   [{userCoords[0].toFixed(5)}, {userCoords[1].toFixed(5)}]
                 </span>
                 {typeof userAccuracy === "number" && !isNaN(userAccuracy) && (
-                  <span className="text-[10px] text-muted-foreground/80">
+                  <span className="text-[10px] text-muted-foreground">
                     (±{Math.round(userAccuracy)}m)
                   </span>
                 )}
@@ -573,8 +709,8 @@ export function LocationPicker({
                 type="button"
                 onClick={handleLocateMe}
                 disabled={isLocatingManually}
-                className="text-[11px] font-semibold text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/20 flex items-center gap-1 transition-all"
-                title="Snap complaint pin directly to your current GPS position"
+                className="text-[11px] font-bold text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg border border-primary/20 flex items-center gap-1 transition-all"
+                title="Snap complaint pin directly to your detected position"
               >
                 <Locate className="w-3 h-3" />
                 <span>Snap Pin to GPS</span>
@@ -584,18 +720,21 @@ export function LocationPicker({
         </div>
 
         {geoError && !userCoords && (
-          <div className="text-[11px] text-amber-400 flex items-center gap-1.5 pt-1">
+          <div className="text-[11px] text-amber-600 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 flex items-center gap-2">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
             <span>{geoError}</span>
           </div>
         )}
 
         {currentAddress && (
-          <div className="text-xs text-muted-foreground/90 pt-2 border-t border-border/50 flex flex-wrap items-center gap-1">
-            <span className="font-semibold text-foreground">Suggested Address:</span>
-            <span>{currentAddress}</span>
+          <div className="text-xs text-muted-foreground pt-2 border-t border-border flex flex-wrap items-center gap-1.5">
+            <span className="font-bold text-foreground flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Suggested Address:
+            </span>
+            <span className="text-foreground font-medium">{currentAddress}</span>
             {isReverseGeocoding && (
-              <span className="text-xs text-primary animate-pulse ml-1">
+              <span className="text-xs text-primary animate-pulse ml-1 font-semibold">
                 (Resolving address...)
               </span>
             )}

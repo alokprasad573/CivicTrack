@@ -31,7 +31,7 @@ export class DuplicateDetectionController {
         throw new ValidationError("Complaint ID is required");
       }
 
-      const result = await DuplicateDetectionService.findCandidates(complaintId);
+      const result = await DuplicateDetectionService.findCandidates(complaintId, req.user);
 
       const response: ApiResponse<DuplicateCheckResponse> = {
         success: true,

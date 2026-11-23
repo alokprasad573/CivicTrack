@@ -1,19 +1,21 @@
 import { Request, Response, NextFunction } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { UserService } from "../users/user.service.js";
+import { UserModel } from "../users/user.model.js";
+import { StaffSessionModel } from "../staff-auth/staff-session.model.js";
+import { JwtService } from "../staff-auth/jwt.service.js";
 import { UnauthorizedError, ForbiddenError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
-import { IAuthUser } from "./identity.types.js";
+import { UserRole } from "@civictrack/contracts";
 
 /**
- * CivicTrack Clerk Authentication Middleware
+ * Unified CivicTrack Authentication Resolver
  * 
- * 1. Verifies Clerk session token using official @clerk/express getAuth.
- * 2. Rejects invalid, expired, or missing sessions (401 Unauthorized).
- * 3. Resolves the corresponding local MongoDB user.
- * 4. Just-In-Time provisions new citizens if webhook has not delivered yet.
- * 5. Rejects inactive or suspended local accounts (403 Forbidden).
- * 6. Attaches trusted user identity to req.user.
+ * Transparently supports:
+ * 1. Staff Custom JWT (Admin & Officer): Extracted from HttpOnly cookies or Bearer token.
+ * 2. Citizen Clerk Session: Extracted and cryptographically verified via Clerk SDK.
+ * 3. Enforces user isActive status from local MongoDB.
+ * 4. Attaches trusted user identity to req.user.
  */
 export async function authenticateUser(
   req: Request,
@@ -21,10 +23,75 @@ export async function authenticateUser(
   next: NextFunction
 ): Promise<void> {
   try {
-    const auth = getAuth(req);
+    // 1. Check for Staff JWT in cookies or Authorization header
+    const adminToken = req.cookies?.civictrack_admin_token;
+    const officerToken = req.cookies?.civictrack_officer_token;
+    const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7).trim()
+        : undefined;
+
+    // Determine candidate staff token (admin cookie, officer cookie, or bearer)
+    const staffCandidateToken = adminToken || officerToken || bearerToken;
+
+    if (staffCandidateToken) {
+      try {
+        const claims = JwtService.verifyAccessToken(staffCandidateToken);
+
+        if (claims.role === UserRole.ADMIN || claims.role === UserRole.OFFICER || claims.role === UserRole.CITIZEN) {
+          // Immediately reject revoked or expired staff sessions
+          if (claims.sessionId && StaffSessionModel.db.readyState === 1) {
+            const session = await StaffSessionModel.findById(claims.sessionId);
+            if (!session || session.isRevoked || session.expiresAt < new Date()) {
+              throw new UnauthorizedError("Session has been revoked or expired. Please sign in again.");
+            }
+          }
+
+          const user = await UserModel.findById(claims.sub);
+
+          if (!user) {
+            throw new UnauthorizedError("User account not found.");
+          }
+
+          if (!user.isActive) {
+            throw new ForbiddenError("Your account has been deactivated.");
+          }
+
+          if (user.role !== claims.role) {
+            throw new ForbiddenError("Role mismatch.");
+          }
+
+          req.user = {
+            id: user._id.toString(),
+            clerkUserId: user.clerkUserId,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            departmentId: user.departmentId ? user.departmentId.toString() : undefined,
+            isActive: user.isActive,
+          };
+
+          return next();
+        }
+      } catch (staffErr: any) {
+        // If Bearer token was a Clerk token, don't halt here; let Clerk getAuth inspect it
+        if (staffCandidateToken !== bearerToken) {
+          throw staffErr;
+        }
+      }
+    }
+
+    // 2. Fallback to Clerk Session (for Citizens)
+    let auth: { userId: string | null } | null = null;
+    try {
+      auth = getAuth(req);
+    } catch {
+      // Ignored if Clerk was not passed in request
+    }
 
     if (!auth || !auth.userId) {
-      throw new UnauthorizedError("Authentication required. Please provide a valid Clerk session.");
+      throw new UnauthorizedError("Authentication required. Please provide a valid session.");
     }
 
     // Resolve local MongoDB user
@@ -71,7 +138,7 @@ export async function authenticateUser(
     }
 
     // Attach trusted application identity to request
-    const authUser: IAuthUser = {
+    req.user = {
       id: user._id.toString(),
       clerkUserId: user.clerkUserId,
       email: user.email,
@@ -81,7 +148,6 @@ export async function authenticateUser(
       isActive: user.isActive,
     };
 
-    req.user = authUser;
     next();
   } catch (error) {
     next(error);

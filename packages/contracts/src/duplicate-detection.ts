@@ -26,9 +26,20 @@ export interface DuplicateCheckResponse {
   totalCandidates: number;
 }
 
-export const LinkDuplicateSchema = z.object({
-  duplicateOfId: z.string().min(1, "Primary complaint ID is required"),
-  remarks: z.string().trim().max(500).optional(),
-});
+export const LinkDuplicateSchema = z
+  .object({
+    duplicateOfId: z.string().min(1, "Primary complaint ID is required").optional(),
+    originalComplaintId: z.string().min(1).optional(),
+    remarks: z.string().trim().max(500).optional(),
+    notes: z.string().trim().max(500).optional(),
+  })
+  .transform((data) => ({
+    duplicateOfId: (data.duplicateOfId || data.originalComplaintId) || "",
+    remarks: data.remarks || data.notes,
+  }))
+  .refine((data) => data.duplicateOfId.length > 0, {
+    message: "Primary complaint ID is required",
+    path: ["duplicateOfId"],
+  });
 
 export type LinkDuplicateDto = z.infer<typeof LinkDuplicateSchema>;

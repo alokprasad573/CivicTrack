@@ -1,9 +1,12 @@
 import { Server as HttpServer } from "node:http";
 import { Server, Socket } from "socket.io";
 import { verifyToken, clerkClient } from "@clerk/express";
+import { Types } from "mongoose";
 import { env } from "./config/env.js";
 import { logger } from "./common/utils/logger.js";
 import { UserService } from "./modules/users/user.service.js";
+import { UserModel } from "./modules/users/user.model.js";
+import { JwtService } from "./modules/staff-auth/jwt.service.js";
 import {
   INotification,
   SocketEvent,
@@ -13,7 +16,7 @@ import {
 
 export interface SocketUser {
   id: string;
-  clerkUserId: string;
+  clerkUserId?: string;
   role: UserRole;
   departmentId?: string;
 }
@@ -28,6 +31,95 @@ let io: Server | null = null;
 
 export function getIO(): Server | null {
   return io;
+}
+
+/**
+ * Disconnect all active socket connections belonging to a user (used upon logout / session revocation)
+ */
+export function disconnectUserSockets(userId: string): void {
+  if (!io) return;
+  try {
+    io.in(`user:${userId}`).disconnectSockets(true);
+    logger.info("Disconnected user sockets on logout/revocation", { userId });
+  } catch (err) {
+    logger.error("Failed to disconnect user sockets", {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  const pairs = cookieHeader.split(";");
+  for (const pair of pairs) {
+    const idx = pair.indexOf("=");
+    if (idx !== -1) {
+      const key = pair.substring(0, idx).trim();
+      const val = pair.substring(idx + 1).trim();
+      cookies[key] = decodeURIComponent(val);
+    }
+  }
+  return cookies;
+}
+
+/**
+ * Verify whether an authenticated socket user has authorization to join a specific room
+ */
+export async function authorizeRoomJoin(user: SocketUser, room: string): Promise<boolean> {
+  // 1. Personal room: only user's own room
+  if (room === `user:${user.id}`) {
+    return true;
+  }
+
+  // 2. Role rooms
+  if (room === "role:admin" || room === "admin:notifications") {
+    return user.role === UserRole.ADMIN;
+  }
+  if (room === "role:officer") {
+    return user.role === UserRole.OFFICER;
+  }
+  if (room === "role:citizen") {
+    return user.role === UserRole.CITIZEN;
+  }
+
+  // 3. Department rooms: dept:<departmentId>
+  if (room.startsWith("dept:")) {
+    const deptId = room.substring(5);
+    if (user.role === UserRole.ADMIN) return true;
+    if (user.role === UserRole.OFFICER && user.departmentId === deptId) return true;
+    return false;
+  }
+
+  // 4. Complaint rooms: complaint:<complaintId>
+  if (room.startsWith("complaint:")) {
+    const complaintId = room.substring(10);
+    if (user.role === UserRole.ADMIN) return true;
+
+    try {
+      if (!Types.ObjectId.isValid(complaintId)) return false;
+      const { ComplaintModel } = await import("./modules/complaints/complaint.model.js");
+      const complaint = await ComplaintModel.findById(complaintId).select("citizenId departmentId assignedOfficerId");
+      if (!complaint) return false;
+
+      if (user.role === UserRole.CITIZEN) {
+        return complaint.citizenId.toString() === user.id;
+      }
+      if (user.role === UserRole.OFFICER) {
+        return (
+          complaint.assignedOfficerId?.toString() === user.id ||
+          (Boolean(user.departmentId) && complaint.departmentId?.toString() === user.departmentId)
+        );
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
+  // Any other arbitrary room name is forbidden
+  return false;
 }
 
 export function initSocketServer(httpServer: HttpServer): Server {
@@ -45,94 +137,146 @@ export function initSocketServer(httpServer: HttpServer): Server {
   io.use(async (socket: Socket, next) => {
     try {
       const authHeader = socket.handshake.headers.authorization;
-      const token =
-        (socket.handshake.auth?.token as string | undefined) ||
-        (authHeader && authHeader.startsWith("Bearer ")
+      const bearerToken =
+        authHeader && authHeader.startsWith("Bearer ")
           ? authHeader.substring(7)
-          : undefined);
+          : undefined;
+      const explicitToken =
+        (socket.handshake.auth?.token as string | undefined) || bearerToken;
 
-      if (!token) {
-        logger.warn("Socket connection rejected: No authentication token provided", {
+      const cookies = parseCookies(socket.handshake.headers.cookie);
+      const adminCookieToken = cookies["civictrack_admin_token"];
+      const officerCookieToken = cookies["civictrack_officer_token"];
+
+      // Priority list of candidate tokens: explicit token, admin cookie, officer cookie
+      const candidateTokens = [explicitToken, adminCookieToken, officerCookieToken].filter(
+        (t): t is string => Boolean(t && typeof t === "string" && t.trim().length > 0)
+      );
+
+      if (candidateTokens.length === 0) {
+        logger.warn("Socket connection rejected: No authentication token or session cookie provided", {
           socketId: socket.id,
           ip: socket.handshake.address,
         });
         return next(new Error("Authentication token required"));
       }
 
-      let clerkUserId: string | undefined;
+      let authenticatedUser: SocketUser | null = null;
 
-      // Automated testing token bypass for hermetic test suites
-      if (token.startsWith("test-token-")) {
-        clerkUserId = token.replace("test-token-", "");
-      } else {
+      // 1. Try Staff JWT verification across candidate tokens
+      for (const token of candidateTokens) {
+        if (token.startsWith("test-token-")) continue;
+
         try {
-          const claims = await verifyToken(token, {
-            secretKey: env.CLERK_SECRET_KEY,
-          });
-          clerkUserId = claims.sub;
-        } catch (err) {
-          logger.warn("Socket handshake token verification failed", {
-            error: err instanceof Error ? err.message : String(err),
-            socketId: socket.id,
-          });
-          return next(new Error("Invalid authentication credentials"));
-        }
-      }
-
-      if (!clerkUserId) {
-        return next(new Error("Invalid token claims: Missing user identifier"));
-      }
-
-      // Resolve local MongoDB user
-      let user = await UserService.findByClerkUserId(clerkUserId);
-
-      // JIT provision user if not yet in database
-      if (!user && !token.startsWith("test-token-")) {
-        try {
-          const clerkUser = await clerkClient.users.getUser(clerkUserId);
-          const primaryEmail =
-            clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
-              ?.emailAddress ||
-            clerkUser.emailAddresses[0]?.emailAddress ||
-            "";
-
-          const fullName =
-            [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
-            clerkUser.username ||
-            primaryEmail.split("@")[0] ||
-            "Citizen";
-
-          if (primaryEmail) {
-            user = await UserService.syncFromClerk({
-              clerkUserId,
-              email: primaryEmail,
-              name: fullName,
-            });
+          const staffPayload = JwtService.verifyAccessToken(token);
+          const userDoc = await UserModel.findById(staffPayload.sub);
+          if (userDoc && userDoc.isActive && userDoc.role === staffPayload.role) {
+            authenticatedUser = {
+              id: userDoc._id.toString(),
+              role: userDoc.role,
+              departmentId: userDoc.departmentId ? userDoc.departmentId.toString() : undefined,
+            };
+            break;
           }
-        } catch (clerkErr) {
-          logger.warn("Could not JIT provision socket user from Clerk API", {
-            clerkUserId,
-            error: clerkErr instanceof Error ? clerkErr.message : String(clerkErr),
-          });
+        } catch {
+          // Token is not a valid staff JWT, proceed to fallback
         }
       }
 
-      if (!user) {
-        return next(new Error("User profile is not provisioned in CivicTrack"));
+      // 2. If not authenticated via Staff JWT, check test tokens or Clerk session
+      if (!authenticatedUser) {
+        for (const token of candidateTokens) {
+          if (token.startsWith("test-token-")) {
+            // Test token bypass strictly forbidden in production
+            if (env.NODE_ENV === "production" || process.env.ALLOW_TEST_TOKEN_AUTH !== "true") {
+              logger.warn("Socket handshake rejected: test-token auth is strictly forbidden in production", {
+                ip: socket.handshake.address,
+              });
+              return next(new Error("Test-token authentication is disabled in production"));
+            }
+
+            const tokenIdentifier = token.replace("test-token-", "");
+            let user = await UserService.findByClerkUserId(tokenIdentifier);
+            if (!user && Types.ObjectId.isValid(tokenIdentifier)) {
+              user = await UserModel.findById(tokenIdentifier);
+            }
+            if (user && user.isActive) {
+              authenticatedUser = {
+                id: user._id.toString(),
+                clerkUserId: user.clerkUserId,
+                role: user.role,
+                departmentId: user.departmentId ? user.departmentId.toString() : undefined,
+              };
+              break;
+            }
+          } else {
+            try {
+              const claims = await verifyToken(token, {
+                secretKey: env.CLERK_SECRET_KEY,
+              });
+              const clerkUserId = claims.sub;
+
+              if (clerkUserId) {
+                let user = await UserService.findByClerkUserId(clerkUserId);
+
+                // JIT provision user if not yet in database
+                if (!user) {
+                  try {
+                    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+                    const primaryEmail =
+                      clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
+                        ?.emailAddress ||
+                      clerkUser.emailAddresses[0]?.emailAddress ||
+                      "";
+
+                    const fullName =
+                      [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
+                      clerkUser.username ||
+                      primaryEmail.split("@")[0] ||
+                      "Citizen";
+
+                    if (primaryEmail) {
+                      user = await UserService.syncFromClerk({
+                        clerkUserId,
+                        email: primaryEmail,
+                        name: fullName,
+                      });
+                    }
+                  } catch (clerkErr) {
+                    logger.warn("Could not JIT provision socket user from Clerk API", {
+                      clerkUserId,
+                      error: clerkErr instanceof Error ? clerkErr.message : String(clerkErr),
+                    });
+                  }
+                }
+
+                if (user && user.isActive) {
+                  authenticatedUser = {
+                    id: user._id.toString(),
+                    clerkUserId: user.clerkUserId,
+                    role: user.role,
+                    departmentId: user.departmentId ? user.departmentId.toString() : undefined,
+                  };
+                  break;
+                }
+              }
+            } catch {
+              // Token is not a valid Clerk token
+            }
+          }
+        }
       }
 
-      if (!user.isActive) {
-        return next(new Error("Account suspended or deactivated"));
+      if (!authenticatedUser) {
+        logger.warn("Socket connection rejected: Invalid or unverified credentials", {
+          socketId: socket.id,
+          ip: socket.handshake.address,
+        });
+        return next(new Error("Invalid authentication credentials"));
       }
 
-      // Attach authenticated identity to socket instance
-      socket.data.user = {
-        id: user._id.toString(),
-        clerkUserId: user.clerkUserId,
-        role: user.role,
-        departmentId: user.departmentId ? user.departmentId.toString() : undefined,
-      };
-
+      // Attach verified identity to socket instance
+      socket.data.user = authenticatedUser;
       next();
     } catch (err) {
       const isDbError =
@@ -188,6 +332,40 @@ export function initSocketServer(httpServer: HttpServer): Server {
       userId: user.id,
       role: user.role,
       departmentId: user.departmentId,
+    });
+
+    // Explicit room join authorization listener
+    socket.on("join", async (room: unknown, ack?: (res: { success: boolean; error?: string }) => void) => {
+      if (typeof room !== "string") {
+        if (ack) ack({ success: false, error: "Invalid room identifier" });
+        return;
+      }
+
+      const isAuthorized = await authorizeRoomJoin(user, room);
+      if (isAuthorized) {
+        socket.join(room);
+        logger.info("Socket client joined authorized room", {
+          socketId: socket.id,
+          userId: user.id,
+          room,
+        });
+        if (ack) ack({ success: true });
+      } else {
+        logger.warn("Socket client attempted unauthorized room join", {
+          socketId: socket.id,
+          userId: user.id,
+          role: user.role,
+          room,
+        });
+        socket.emit("error", { message: "Unauthorized room join", room });
+        if (ack) ack({ success: false, error: "Unauthorized room access denied" });
+      }
+    });
+
+    socket.on("leave", (room: unknown) => {
+      if (typeof room === "string") {
+        socket.leave(room);
+      }
     });
 
     socket.on("disconnect", (reason) => {

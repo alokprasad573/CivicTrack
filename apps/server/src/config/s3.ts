@@ -12,12 +12,20 @@ let s3ClientInstance: S3Client | null = null;
  */
 export function isS3Configured(): boolean {
   if (
+    !env.AWS_S3_BUCKET_NAME ||
+    env.AWS_S3_BUCKET_NAME === "REPLACE_ME"
+  ) {
+    return false;
+  }
+  // In production, IAM role / default provider chain can supply credentials even if static keys are not in env
+  if (env.NODE_ENV === "production") {
+    return true;
+  }
+  if (
     !env.AWS_ACCESS_KEY_ID ||
     !env.AWS_SECRET_ACCESS_KEY ||
-    !env.AWS_S3_BUCKET_NAME ||
     env.AWS_ACCESS_KEY_ID === "REPLACE_ME" ||
-    env.AWS_SECRET_ACCESS_KEY === "REPLACE_ME" ||
-    env.AWS_S3_BUCKET_NAME === "REPLACE_ME"
+    env.AWS_SECRET_ACCESS_KEY === "REPLACE_ME"
   ) {
     return false;
   }
@@ -34,13 +42,20 @@ export function getS3Client(): S3Client {
         region: env.AWS_REGION,
         bucket: env.AWS_S3_BUCKET_NAME,
       });
-      s3ClientInstance = new S3Client({
-        region: env.AWS_REGION,
-        credentials: {
-          accessKeyId: env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: env.AWS_SECRET_ACCESS_KEY!,
-        },
-      });
+      if (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_ACCESS_KEY_ID !== "REPLACE_ME") {
+        s3ClientInstance = new S3Client({
+          region: env.AWS_REGION,
+          credentials: {
+            accessKeyId: env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+          },
+        });
+      } else {
+        // Fall back to AWS default credential provider chain (IAM roles, ECS task roles, EC2 instance profiles)
+        s3ClientInstance = new S3Client({
+          region: env.AWS_REGION,
+        });
+      }
     } else {
       // Local dev / test client with dummy credentials
       s3ClientInstance = new S3Client({

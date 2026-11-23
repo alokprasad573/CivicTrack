@@ -4,10 +4,11 @@ import { logger } from "../common/utils/logger.js";
 
 async function main(): Promise<void> {
   const email = process.argv[2];
-  const name = process.argv[3] || "Platform Admin";
+  const password = process.argv[3];
+  const name = process.argv[4] || "Platform Admin";
 
-  if (!email || !email.includes("@")) {
-    console.error("Usage: npx tsx src/scripts/bootstrap-admin.ts <admin-email> [admin-name]");
+  if (!email || !email.includes("@") || !password) {
+    console.error("Usage: npx tsx src/scripts/bootstrap-admin.ts <admin-email> <admin-password> [admin-name]");
     process.exit(1);
   }
 
@@ -20,7 +21,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const adminUser = await UserService.bootstrapAdmin(email, name);
+    const adminUser = await UserService.bootstrapAdmin(email, name, password);
     logger.info("Admin user successfully bootstrapped:", {
       id: adminUser._id.toString(),
       email: adminUser.email,

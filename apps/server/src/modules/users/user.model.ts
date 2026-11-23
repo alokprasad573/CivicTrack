@@ -3,7 +3,8 @@ import { UserRole } from "@civictrack/contracts";
 
 export interface IUserDocument extends Document {
   _id: Types.ObjectId;
-  clerkUserId: string;
+  clerkUserId?: string;
+  passwordHash?: string;
   email: string;
   name: string;
   role: UserRole;
@@ -17,10 +18,16 @@ const UserSchema = new Schema<IUserDocument>(
   {
     clerkUserId: {
       type: String,
-      required: [true, "Clerk user ID is required"],
+      required: false,
       unique: true,
+      sparse: true,
       index: true,
       trim: true,
+    },
+    passwordHash: {
+      type: String,
+      select: false,
+      required: false,
     },
     email: {
       type: String,

@@ -9,17 +9,54 @@ import {
   getClientOlaMapsApiKey,
 } from "../lib/ola-maps-config";
 
-// Intercept and suppress known benign Ola Maps SDK style warning in Next.js development overlay
+function isBenignOlaMapError(arg: any): boolean {
+  if (!arg) return false;
+  if (arg instanceof Error || (typeof arg === "object" && arg !== null)) {
+    if (arg.name === "AbortError") return true;
+    const msg = arg.message || "";
+    if (
+      msg.includes("signal is aborted") ||
+      msg.includes("aborted without reason") ||
+      msg.includes("The operation was aborted") ||
+      msg.includes("The user aborted a request") ||
+      msg.includes('Source layer "3d_model"') ||
+      msg.includes("3d_model_data")
+    ) {
+      return true;
+    }
+  }
+  if (typeof arg === "string") {
+    if (
+      arg.includes("signal is aborted") ||
+      arg.includes("aborted without reason") ||
+      arg.includes("The operation was aborted") ||
+      arg.includes("The user aborted a request") ||
+      arg.includes('Source layer "3d_model"') ||
+      arg.includes("3d_model_data") ||
+      arg.includes("AbortError")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Intercept and suppress known benign Ola Maps SDK style warnings and fetch AbortErrors during teardown
 if (typeof window !== "undefined" && !(window as any).__olamaps_console_patched) {
   (window as any).__olamaps_console_patched = true;
   const originalConsoleError = console.error;
   console.error = (...args: any[]) => {
-    const firstArg = typeof args[0] === "string" ? args[0] : "";
-    if (firstArg.includes('Source layer "3d_model" does not exist on source "vectordata"')) {
+    if (args.some(isBenignOlaMapError)) {
       return;
     }
     originalConsoleError.apply(console, args);
   };
+
+  window.addEventListener("unhandledrejection", (event) => {
+    if (isBenignOlaMapError(event.reason)) {
+      event.preventDefault();
+    }
+  });
 }
 
 export interface UseOlaMapOptions {
@@ -50,6 +87,7 @@ export function useOlaMap(options: UseOlaMapOptions) {
   const currentCenterRef = useRef<Coordinates>(initialCenter);
   const currentZoomRef = useRef<number>(initialZoom);
   const isInitializingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // Initialize Ola Map
   const initializeMap = useCallback(
@@ -111,12 +149,27 @@ export function useOlaMap(options: UseOlaMapOptions) {
           bearing: 0,
         });
 
-        // 1. Suppress unhandled MapLibre error logging for non-existent 3D model vector layers
+        // If component unmounted while initializing, dispose instance immediately
+        if (!isMountedRef.current) {
+          try {
+            mapInstance.remove();
+          } catch {
+            // ignore cleanup errors
+          }
+          return;
+        }
+
+        // 1. Suppress unhandled MapLibre error logging for non-existent 3D model vector layers or aborted requests
         mapInstance.on("error", (e: any) => {
-          const msg = e?.error?.message || e?.message || "";
+          const err = e?.error || e;
+          const msg = err?.message || String(err || "");
           if (
-            typeof msg === "string" &&
-            (msg.includes('Source layer "3d_model"') || msg.includes("3d_model_data"))
+            err?.name === "AbortError" ||
+            msg.includes("signal is aborted") ||
+            msg.includes("aborted without reason") ||
+            msg.includes("The operation was aborted") ||
+            msg.includes('Source layer "3d_model"') ||
+            msg.includes("3d_model_data")
           ) {
             return;
           }
@@ -242,16 +295,19 @@ export function useOlaMap(options: UseOlaMapOptions) {
 
   // Mount effect
   useEffect(() => {
+    isMountedRef.current = true;
     initializeMap(initialMode);
 
     return () => {
+      isMountedRef.current = false;
       if (mapInstanceRef.current) {
+        const instance = mapInstanceRef.current;
+        mapInstanceRef.current = null;
         try {
-          mapInstanceRef.current.remove();
+          instance.remove();
         } catch {
           // ignore cleanup errors
         }
-        mapInstanceRef.current = null;
       }
     };
   }, [initializeMap, initialMode]);

@@ -1,23 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
 import {
-  Activity,
-  Plus,
+  LayoutDashboard,
+  PlusCircle,
   FileText,
   MapPin,
   Menu,
   X,
-  ShieldCheck,
-  Bell,
+  Landmark,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import { NotificationBell } from "../notifications/notification-bell";
-import { ThemeToggle } from "../theme/theme-toggle";
-import { PersonaPills } from "./persona-pills";
 
 interface NavItem {
   id: string;
@@ -27,78 +25,104 @@ interface NavItem {
 }
 
 const CITIZEN_NAV: NavItem[] = [
-  { id: "OVERVIEW", label: "Overview", href: "/citizen", icon: Activity },
-  { id: "REPORT", label: "Report an Issue", href: "/citizen/report", icon: Plus },
-  { id: "MY_COMPLAINTS", label: "My Complaints", href: "/citizen/complaints", icon: FileText },
-  { id: "NEARBY", label: "Nearby Map", href: "/map", icon: MapPin },
+  { id: "DASHBOARD", label: "Dashboard", href: "/citizen", icon: LayoutDashboard },
+  { id: "REPORT", label: "Report an Issue", href: "/citizen/report", icon: PlusCircle },
+  { id: "COMPLAINTS", label: "My Reports", href: "/citizen/complaints", icon: FileText },
+  { id: "CITY_MAP", label: "City Map", href: "/map", icon: MapPin },
 ];
-
 
 export function CitizenShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, isLoaded } = useUser();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-200">
-      {/* Top Role Switcher & System Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-card/95 border-b border-border">
+    <div className="min-h-screen flex flex-col bg-background text-foreground antialiased pb-20 lg:pb-0">
+      {/* Top Header */}
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-card/90 border-b border-border shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          {/* Brand Logo */}
+          {/* Brand Logo & Mobile Trigger */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-muted-foreground hover:text-foreground"
+              className="lg:hidden p-2.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Toggle navigation menu"
             >
-              <Menu className="w-5 h-5" />
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-xl bg-[#d95d39] flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-                <ShieldCheck className="w-5 h-5 text-white" />
+            <Link href="/citizen" className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
+                <Landmark className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-display font-bold text-lg tracking-tight text-foreground">
+                  <span className="font-bold text-lg tracking-tight text-foreground">
                     CivicTrack
                   </span>
-                  <span className="hidden sm:inline-block text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-semibold">
+                  <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
                     Citizen
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground hidden sm:block">
-                  Municipal Infrastructure & Resolution Portal
+                  Civic Complaints & Neighborhood Improvements
                 </p>
               </div>
             </Link>
           </div>
 
-          {/* Interactive Role Switcher Pills */}
-          <PersonaPills activePersona="CITIZEN" />
+          {/* Desktop Navigation Links */}
+          <nav className="hidden lg:flex items-center gap-1.5" aria-label="Citizen portal navigation">
+            {CITIZEN_NAV.map((nav) => {
+              const Icon = nav.icon;
+              const isActive =
+                isHydrated &&
+                (nav.href === "/citizen"
+                  ? pathname === "/citizen"
+                  : pathname.startsWith(nav.href));
 
-          {/* Right Utility Controls: Theme Toggle + Socket Notifications + User */}
+              return (
+                <Link
+                  key={nav.id}
+                  href={nav.href}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all min-h-[44px] ${
+                    isActive
+                      ? "bg-secondary text-primary font-bold shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? "text-primary" : "opacity-70"}`} />
+                  <span>{nav.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Right Header User Controls */}
           <div className="flex items-center gap-2.5">
-            <ThemeToggle />
-
             <NotificationBell role="citizen" />
 
             {isLoaded && (
-              <div className="flex items-center gap-2.5 pl-2.5 border-l border-border">
+              <div className="flex items-center gap-2.5 pl-2 border-l border-border">
                 <UserButton
                   appearance={{
                     elements: {
-                      avatarBox: "w-8 h-8 rounded-full border border-border shadow-sm",
+                      userButtonAvatarBox: "w-8 h-8 rounded-full border border-border",
                     },
                   }}
                 />
-                <div className="hidden lg:block text-left text-xs">
-                  <div className="font-semibold text-foreground leading-tight truncate max-w-[130px]">
-                    {user?.fullName || "Citizen"}
+                <div className="hidden sm:block text-left text-xs">
+                  <div className="font-semibold text-foreground leading-tight truncate max-w-[120px]">
+                    {user?.fullName || user?.firstName || "Resident"}
                   </div>
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase">
-                    ROLE: CITIZEN
+                  <div className="text-[10px] text-muted-foreground">
+                    Citizen Portal
                   </div>
                 </div>
               </div>
@@ -106,61 +130,36 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Sub-Navigation Bar for Citizen */}
-        <div className="border-t border-border bg-secondary/30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1.5 overflow-x-auto py-2">
+        {/* Mobile Navigation Dropdown Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-border bg-card p-4 space-y-2 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase px-2 mb-2">
+              Menu Navigation
+            </p>
             {CITIZEN_NAV.map((nav) => {
               const Icon = nav.icon;
               const isActive =
-                nav.href === "/citizen"
+                isHydrated &&
+                (nav.href === "/citizen"
                   ? pathname === "/citizen"
-                  : pathname.startsWith(nav.href);
+                  : pathname.startsWith(nav.href));
 
               return (
                 <Link
                   key={nav.id}
                   href={nav.href}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? "bg-card text-[#d95d39] dark:text-[#f08c6e] border border-border shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-[#d95d39]" : "opacity-60"}`} />
-                  <span>{nav.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Mobile Navigation Drawer */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-border bg-card px-4 pt-3 pb-4 space-y-2">
-            <div className="text-[10px] font-mono text-muted-foreground uppercase px-2">Role Portals</div>
-            <PersonaPills activePersona="CITIZEN" mobile onItemClick={() => setMobileMenuOpen(false)} />
-
-            <div className="text-[10px] font-mono text-muted-foreground uppercase px-2 pt-2 border-t border-border">Citizen Sections</div>
-            {CITIZEN_NAV.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === "/citizen"
-                  ? pathname === "/citizen"
-                  : pathname.startsWith(item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition min-h-[48px] ${
                     isActive
-                      ? "bg-[#d95d39] text-white"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground hover:bg-secondary"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-5 h-5" />
+                    <span>{nav.label}</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 opacity-50" />
                 </Link>
               );
             })}
@@ -168,18 +167,54 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      {/* Main Content Viewport */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {children}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-card/60 py-4 px-4 sm:px-6 text-xs text-muted-foreground">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>CivicTrack &bull; Smart Civic Complaint Management System</span>
-          <span className="font-mono text-[11px] text-muted-foreground">
-            Sandstone & Terracotta Civic UI &bull; GeoJSON 2dsphere &bull; S3 Pre-Signed
-          </span>
+      {/* Mobile Bottom Navigation Bar (48px+ touch targets) */}
+      <nav
+        aria-label="Mobile navigation bar"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border lg:hidden px-2 py-1 shadow-lg"
+      >
+        <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
+          {CITIZEN_NAV.map((nav) => {
+            const Icon = nav.icon;
+            const isActive =
+              isHydrated &&
+              (nav.href === "/citizen"
+                ? pathname === "/citizen"
+                : pathname.startsWith(nav.href));
+
+            return (
+              <Link
+                key={nav.id}
+                href={nav.href}
+                className={`flex flex-col items-center justify-center py-2 rounded-xl text-[10px] font-semibold transition min-h-[48px] ${
+                  isActive
+                    ? "text-primary font-bold bg-primary/10"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "opacity-75"}`} />
+                <span className="mt-1 truncate max-w-[70px] text-center">{nav.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Desktop Footer */}
+      <footer className="border-t border-border bg-card/50 py-5 text-xs text-muted-foreground mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <p>© {new Date().getFullYear()} CivicTrack &bull; Municipal Civic Issue Resolution</p>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Fast Reporting</span>
+            <span>&bull;</span>
+            <span>Live Location Pinning</span>
+            <span>&bull;</span>
+            <span>Transparent Tracking</span>
+          </div>
         </div>
       </footer>
     </div>

@@ -29,7 +29,10 @@ export class AnalyticsController {
       const filter = AnalyticsFilterSchema.parse(req.query);
 
       // If user is Officer, constrain filter to their assigned department
-      if (req.user.role === UserRole.OFFICER && req.user.departmentId) {
+      if (req.user.role === UserRole.OFFICER) {
+        if (!req.user.departmentId) {
+          throw new ForbiddenError("Officer is not assigned to any municipal department");
+        }
         filter.departmentId = req.user.departmentId;
       }
 

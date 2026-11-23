@@ -6,6 +6,8 @@ import {
   RouteCalculationResult,
 } from "@civictrack/contracts";
 import { getOlaMapsApiKey, isOlaMapsConfigured } from "../../config/maps.js";
+import { env } from "../../config/env.js";
+import { ServiceUnavailableError } from "../../common/errors/app-error.js";
 import { logger } from "../../common/utils/logger.js";
 
 /**
@@ -61,7 +63,14 @@ export class OlaMapsAdapter {
       }
     }
 
-    // High-fidelity fallback resolver
+    if (process.env.NODE_ENV === "production" || env.NODE_ENV === "production") {
+      throw new ServiceUnavailableError(
+        "Live geocoding service is currently unavailable",
+        "GEOCODING_UNAVAILABLE"
+      );
+    }
+
+    // High-fidelity fallback resolver for development and offline testing
     return {
       formattedAddress: `Civic Sector ${Math.floor(Math.abs(lat * 10) % 20) + 1}, ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`,
       street: `Road ${Math.floor(Math.abs(lng * 10) % 15) + 1}`,
@@ -100,7 +109,14 @@ export class OlaMapsAdapter {
       }
     }
 
-    // Fallback search suggestions
+    if (process.env.NODE_ENV === "production" || env.NODE_ENV === "production") {
+      throw new ServiceUnavailableError(
+        "Live address search is currently unavailable",
+        "GEOCODING_UNAVAILABLE"
+      );
+    }
+
+    // Fallback search suggestions for development and offline testing
     return [
       {
         formattedAddress: `${query}, Main Civic Road, Bangalore, Karnataka`,
@@ -162,7 +178,7 @@ export class OlaMapsAdapter {
           }
         }
       } catch (err) {
-        logger.warn("Ola Maps Directions API error, using high-precision geometric routing engine", {
+        logger.warn("Ola Maps Directions API error", {
           error: err instanceof Error ? err.message : String(err),
           origin,
           destination,
@@ -170,7 +186,14 @@ export class OlaMapsAdapter {
       }
     }
 
-    // High-precision Geometric Route Calculation Engine
+    if (process.env.NODE_ENV === "production" || env.NODE_ENV === "production") {
+      throw new ServiceUnavailableError(
+        "Live turn-by-turn routing is currently unavailable",
+        "ROUTING_UNAVAILABLE"
+      );
+    }
+
+    // Deterministic geometric route estimation (development fallback only)
     return this.generateGeometricRoute(origin, destination);
   }
 
@@ -208,41 +231,20 @@ export class OlaMapsAdapter {
       destination,
     ];
 
-    const d1 = Math.round(totalDistanceMeters * 0.35);
-    const d2 = Math.round(totalDistanceMeters * 0.3);
-    const d3 = Math.round(totalDistanceMeters * 0.25);
-    const d4 = Math.round(totalDistanceMeters * 0.1);
-
     const steps: NavigationStep[] = [
       {
-        instruction: "Head northeast towards Main Avenue",
+        instruction: "Straight-line route estimate (Live routing unavailable in development)",
         maneuver: "depart",
-        distanceMeters: d1,
-        durationSeconds: Math.round(totalDurationSeconds * 0.35),
-        roadName: "Main Avenue",
+        distanceMeters: Math.round(totalDistanceMeters * 0.5),
+        durationSeconds: Math.round(totalDurationSeconds * 0.5),
+        roadName: "Direct Trajectory",
         location: origin,
       },
       {
-        instruction: "Turn right onto Civic Boulevard",
-        maneuver: "turn-right",
-        distanceMeters: d2,
-        durationSeconds: Math.round(totalDurationSeconds * 0.3),
-        roadName: "Civic Boulevard",
-        location: mid1,
-      },
-      {
-        instruction: "Turn left onto Ward Cross Road",
-        maneuver: "turn-left",
-        distanceMeters: d3,
-        durationSeconds: Math.round(totalDurationSeconds * 0.25),
-        roadName: "Ward Cross Road",
-        location: mid2,
-      },
-      {
-        instruction: "You have arrived at your destination",
+        instruction: "Arrive at destination coordinates",
         maneuver: "arrive",
-        distanceMeters: d4,
-        durationSeconds: Math.round(totalDurationSeconds * 0.1),
+        distanceMeters: Math.round(totalDistanceMeters * 0.5),
+        durationSeconds: Math.round(totalDurationSeconds * 0.5),
         roadName: "Destination Site",
         location: destination,
       },
@@ -258,6 +260,7 @@ export class OlaMapsAdapter {
       steps,
       origin,
       destination,
+      isEstimated: true,
     };
   }
 }

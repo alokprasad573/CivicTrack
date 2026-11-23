@@ -8,6 +8,7 @@ import {
   ComplaintCategory,
   ComplaintPriority,
 } from "@civictrack/contracts";
+import { ValidationError, ServiceUnavailableError } from "../../common/errors/app-error.js";
 
 export class AnalyticsService {
   /**
@@ -15,6 +16,9 @@ export class AnalyticsService {
    */
   public static async getSummary(filter: AnalyticsFilterDto): Promise<IAnalyticsSummary> {
     if (ComplaintModel.db.readyState !== 1) {
+      if (process.env.NODE_ENV === "production") {
+        throw new ServiceUnavailableError("Database is currently unavailable for analytics reporting");
+      }
       return this.getEmptySummary();
     }
 
@@ -26,11 +30,19 @@ export class AnalyticsService {
       if (filter.endDate) (matchQuery.createdAt as Record<string, unknown>).$lte = filter.endDate;
     }
 
-    if (filter.departmentId && Types.ObjectId.isValid(filter.departmentId)) {
+    if (filter.departmentId) {
+      if (!Types.ObjectId.isValid(filter.departmentId)) {
+        throw new ValidationError("Invalid departmentId format");
+      }
       matchQuery.departmentId = new Types.ObjectId(filter.departmentId);
     }
 
     const now = new Date();
+
+    const trendMatch: Record<string, unknown> = { ...matchQuery };
+    if (!trendMatch.createdAt) {
+      trendMatch.createdAt = { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) };
+    }
 
     const [
       overallStats,
@@ -234,12 +246,10 @@ export class AnalyticsService {
         },
       ]),
 
-      // 6. Daily Trend (last 14 days)
+      // 6. Daily Trend (applies matching department/date filters)
       ComplaintModel.aggregate([
         {
-          $match: {
-            createdAt: { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
-          },
+          $match: trendMatch,
         },
         {
           $group: {

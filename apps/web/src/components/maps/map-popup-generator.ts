@@ -66,7 +66,12 @@ export function generateComplaintPopupHtml(data: PopupComplaintData): string {
     border: "rgba(255, 255, 255, 0.15)",
   };
 
-  const detailsHref = `/citizen/complaints/${data.id}`;
+  const detailsHref =
+    data.userRole === "admin"
+      ? `/admin/complaints/${data.id}`
+      : data.userRole === "officer"
+      ? `/officer/complaints/${data.id}`
+      : `/citizen/complaints/${data.id}`;
   const descriptionSnippet = data.description
     ? data.description.length > 90
       ? data.description.slice(0, 90) + "..."

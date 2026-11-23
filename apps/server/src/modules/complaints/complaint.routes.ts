@@ -3,6 +3,7 @@ import { ComplaintController } from "./complaint.controller.js";
 import { authenticateUser } from "../identity/clerk.middleware.js";
 import { requireRole } from "../identity/rbac.middleware.js";
 import { uploadEvidenceMiddleware } from "../../common/middleware/upload.middleware.js";
+import { uploadIntentRateLimiter } from "../../common/middleware/rate-limit.middleware.js";
 import { UserRole } from "@civictrack/contracts";
 
 const router = Router();
@@ -11,7 +12,13 @@ const router = Router();
 router.get("/nearby", ComplaintController.findNearby);
 
 // Complaint creation (authenticated citizen, supports multipart/form-data evidence files)
-router.post("/", authenticateUser, uploadEvidenceMiddleware, ComplaintController.create);
+router.post(
+  "/",
+  authenticateUser,
+  uploadIntentRateLimiter,
+  uploadEvidenceMiddleware,
+  ComplaintController.create
+);
 
 // Scoped listing (citizen view own, officer view assigned, admin view all)
 router.get("/", authenticateUser, ComplaintController.list);
@@ -27,9 +34,10 @@ router.post("/:id/review", authenticateUser, requireRole(UserRole.ADMIN), Compla
 router.post("/:id/verify", authenticateUser, requireRole(UserRole.ADMIN), ComplaintController.verify);
 router.post("/:id/reject", authenticateUser, requireRole(UserRole.ADMIN), ComplaintController.reject);
 router.post("/:id/assign", authenticateUser, requireRole(UserRole.ADMIN), ComplaintController.assign);
+router.post("/:id/close", authenticateUser, requireRole(UserRole.ADMIN), ComplaintController.close);
 
 // Officer workflow operations
 router.post("/:id/start-work", authenticateUser, ComplaintController.startWork);
-router.post("/:id/resolve", authenticateUser, ComplaintController.resolve);
+router.post("/:id/resolve", authenticateUser, uploadEvidenceMiddleware, ComplaintController.resolve);
 
 export const complaintRoutes = router;

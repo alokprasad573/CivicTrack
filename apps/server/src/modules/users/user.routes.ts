@@ -5,6 +5,9 @@ import { requireRole } from "../identity/rbac.middleware.js";
 import { UserService } from "./user.service.js";
 import { UserRole, ApiResponse, PaginatedResponse, PaginationQuerySchema } from "@civictrack/contracts";
 import { IUserDocument } from "./user.model.js";
+import { ForbiddenError, ValidationError } from "../../common/errors/app-error.js";
+import { Types } from "mongoose";
+import { env } from "../../config/env.js";
 
 const router = Router();
 
@@ -22,13 +25,23 @@ router.get("/me", authenticateUser, (req: Request, res: Response): void => {
 
 /**
  * POST /api/v1/users/me/switch-role
- * Seamlessly switches active persona role (CITIZEN, ADMIN, OFFICER) for testing and development
+ * Development-only switch active persona role. Strictly disabled in production.
  */
 router.post(
   "/me/switch-role",
+  (_req: Request, _res: Response, next: NextFunction) => {
+    if (env.NODE_ENV === "production" || env.ENABLE_DEV_ROLE_SWITCH !== "true") {
+      return next(new ForbiddenError("Self-service role switching is disabled in production."));
+    }
+    next();
+  },
   authenticateUser,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      if (env.NODE_ENV === "production" || env.ENABLE_DEV_ROLE_SWITCH !== "true") {
+        throw new ForbiddenError("Self-service role switching is disabled in production.");
+      }
+
       const dto = z.object({
         role: z.nativeEnum(UserRole),
         departmentId: z.string().optional(),
@@ -63,7 +76,8 @@ router.post(
 
 /**
  * GET /api/v1/users
- * Administrative and departmental staff directory listing with pagination and search
+ * Administrative and departmental staff directory listing with pagination and search.
+ * Scoped to officer's department when invoked by an officer.
  */
 router.get(
   "/",
@@ -75,11 +89,24 @@ router.get(
       const roleFilter = req.query.role as UserRole | undefined;
       const search = req.query.search as string | undefined;
 
+      // Scoping: Officers are strictly constrained to their own department
+      let departmentId: string | undefined = req.query.departmentId as string | undefined;
+      if (departmentId && !Types.ObjectId.isValid(departmentId)) {
+        throw new ValidationError("Invalid department ID format");
+      }
+      if (req.user!.role === UserRole.OFFICER) {
+        if (departmentId && departmentId !== req.user!.departmentId) {
+          throw new ForbiddenError("Officers cannot view users outside their assigned department");
+        }
+        departmentId = req.user!.departmentId;
+      }
+
       const result = await UserService.listUsers({
         page: query.page,
         limit: query.limit,
         role: roleFilter,
         search,
+        departmentId,
       });
 
       const response: PaginatedResponse<IUserDocument> = {

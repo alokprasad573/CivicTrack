@@ -4,15 +4,26 @@ import { env } from "./config/env.js";
 import { connectDatabase, disconnectDatabase } from "./config/database.js";
 import { logger } from "./common/utils/logger.js";
 import { initSocketServer, getIO } from "./socket.js";
+import { SlaService } from "./modules/sla/sla.service.js";
 
 async function startServer(): Promise<void> {
   const httpServer = http.createServer(app);
   initSocketServer(httpServer);
 
-  const server = httpServer.listen(env.PORT, "0.0.0.0", () => {
+  // Periodic automatic SLA breach escalation scan (runs every 15 minutes)
+  const SLA_SCAN_INTERVAL_MS = 15 * 60 * 1000;
+  const slaInterval = setInterval(() => {
+    SlaService.scanAndEscalateOverdue().catch((err: unknown) => {
+      logger.error("Automatic background SLA scan error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }, SLA_SCAN_INTERVAL_MS);
+  slaInterval.unref();
+
+  const server = httpServer.listen(env.PORT, () => {
     logger.info(`CivicTrack API server & Socket.io started successfully`, {
       port: env.PORT,
-      host: "0.0.0.0",
       environment: env.NODE_ENV,
       clientUrl: env.CLIENT_URL,
     });

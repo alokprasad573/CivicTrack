@@ -49,7 +49,10 @@ export class DuplicateDetectionService {
   /**
    * Find and score explainable duplicate complaint candidates
    */
-  public static async findCandidates(complaintId: string): Promise<DuplicateCheckResponse> {
+  public static async findCandidates(
+    complaintId: string,
+    user?: IAuthUser
+  ): Promise<DuplicateCheckResponse> {
     if (!Types.ObjectId.isValid(complaintId)) {
       throw new ValidationError("Invalid complaint ID format");
     }
@@ -67,10 +70,16 @@ export class DuplicateDetectionService {
       throw new NotFoundError("Target complaint not found");
     }
 
+    if (user && user.role === UserRole.OFFICER) {
+      const deptId = target.departmentId?.toString();
+      if (!deptId || deptId !== user.departmentId) {
+        throw new ForbiddenError("You can only inspect duplicate candidates for complaints in your department");
+      }
+    }
+
     const [targetLng, targetLat] = target.location.coordinates;
 
-    // Spatial filter: Find complaints within 250 meters
-    const nearby = await ComplaintModel.find({
+    const nearbyFilter: Record<string, unknown> = {
       _id: { $ne: target._id },
       status: {
         $nin: [ComplaintStatus.REJECTED, ComplaintStatus.CLOSED],
@@ -84,7 +93,15 @@ export class DuplicateDetectionService {
           $maxDistance: 250, // 250 meters max radius
         },
       },
-    }).limit(20);
+    };
+
+    // Strict departmental isolation: Officers only see candidates within their own department
+    if (user && user.role === UserRole.OFFICER && user.departmentId) {
+      nearbyFilter.departmentId = new Types.ObjectId(user.departmentId);
+    }
+
+    // Spatial filter: Find complaints within 250 meters
+    const nearby = await ComplaintModel.find(nearbyFilter).limit(20);
 
     const candidates: IDuplicateCandidate[] = [];
 
@@ -177,6 +194,10 @@ export class DuplicateDetectionService {
       throw new ForbiddenError("Only administrators can link duplicate complaints.");
     }
 
+    if (!Types.ObjectId.isValid(complaintId) || !Types.ObjectId.isValid(duplicateOfId)) {
+      throw new ValidationError("Invalid complaint ID format");
+    }
+
     if (complaintId === duplicateOfId) {
       throw new ValidationError("A complaint cannot be linked as a duplicate of itself.");
     }
@@ -188,6 +209,10 @@ export class DuplicateDetectionService {
 
     if (!target) throw new NotFoundError("Target complaint not found");
     if (!primary) throw new NotFoundError("Primary complaint to link not found");
+
+    if (primary.isDuplicate && primary.duplicateOf?.toString() === target._id.toString()) {
+      throw new ValidationError("Cannot link complaints in a circular duplicate relationship.");
+    }
 
     target.duplicateOf = primary._id;
     target.isDuplicate = true;

@@ -82,7 +82,8 @@ export function MapMarkerLayer({
 
           // Always keep the selected complaint unclustered so its popup and highlight are visible
           validComplaints.forEach((c) => {
-            if (c.id === selectedComplaintId) {
+            const cId = c.id || (c as any)._id;
+            if (selectedComplaintId && (cId === selectedComplaintId || c.id === selectedComplaintId || (c as any)._id === selectedComplaintId)) {
               itemsToRender.push(c);
             } else {
               unassigned.push(c);
@@ -92,7 +93,11 @@ export function MapMarkerLayer({
           const clusters: ClusterGroup[] = [];
 
           unassigned.forEach((complaint) => {
-            const [lng, lat] = complaint.location.coordinates;
+            const rawLng = complaint.location.coordinates[0];
+            const rawLat = complaint.location.coordinates[1];
+            const lng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+            const lat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+
             let pos: { x: number; y: number } | null = null;
             try {
               pos = map.project([lng, lat]);
@@ -124,8 +129,9 @@ export function MapMarkerLayer({
                 (assignedCluster.center[1] * (count - 1) + lat) / count,
               ];
             } else {
+              const cId = complaint.id || (complaint as any)._id || "";
               clusters.push({
-                id: `cluster_${complaint.id}`,
+                id: `cluster_${cId}`,
                 center: [lng, lat],
                 complaints: [complaint],
               });
@@ -190,10 +196,18 @@ export function MapMarkerLayer({
 
         // 3. Render Individual Complaint Markers
         itemsToRender.forEach((complaint) => {
-          const [lng, lat] = complaint.location.coordinates;
+          const rawLng = complaint.location.coordinates[0];
+          const rawLat = complaint.location.coordinates[1];
+          const lng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+          const lat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+
           const categoryColor = CATEGORY_COLORS[complaint.category] || "#94a3b8";
           const statusIndicator = STATUS_INDICATOR_COLORS[complaint.status] || "#94a3b8";
-          const isSelected = selectedComplaintId === complaint.id;
+          const cId = complaint.id || (complaint as any)._id || "";
+          const isSelected = Boolean(
+            (selectedComplaintId && (selectedComplaintId === cId || selectedComplaintId === complaint.id || selectedComplaintId === (complaint as any)._id)) ||
+            complaints.length === 1
+          );
 
           const el = document.createElement("div");
           el.className = `civic-marker-container ${isSelected ? "selected-marker" : ""}`;
@@ -250,7 +264,7 @@ export function MapMarkerLayer({
           });
 
           const popupHtml = generateComplaintPopupHtml({
-            id: complaint.id,
+            id: cId,
             referenceNumber: complaint.referenceNumber,
             title: complaint.title,
             description: complaint.description,

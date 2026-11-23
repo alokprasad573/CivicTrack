@@ -2,6 +2,9 @@
   "name": "civictrack",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "CivicTrack — Smart Civic Complaint Management System",
   "workspaces": [
     "packages/*",

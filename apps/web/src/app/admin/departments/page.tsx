@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { ComplaintCategory } from "@civictrack/contracts";
-import { AdminShell } from "../../../components/layout/admin-shell";
 import { CATEGORY_COLORS } from "../../../lib/ola-maps-config";
 import {
   Building2,
@@ -13,6 +12,7 @@ import {
   Loader2,
   XCircle,
   Layers,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function AdminDepartmentsPage() {
@@ -32,7 +32,9 @@ export default function AdminDepartmentsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/departments");
+      const res = await fetch("/api/v1/departments", {
+        credentials: "include",
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -78,6 +80,7 @@ export default function AdminDepartmentsPage() {
       const res = await fetch("/api/v1/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           name: name.trim(),
           code: code.trim().toUpperCase(),
@@ -103,15 +106,14 @@ export default function AdminDepartmentsPage() {
   };
 
   return (
-    <AdminShell>
-      <div className="space-y-6">
-        {/* Header */}
+    <div className="space-y-6">
+        {/* Header inspired by PolicyOracle */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
               Municipal Departments
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-500 mt-1">
               Manage city departments, operational codes, and assigned civic issue categories.
             </p>
           </div>
@@ -119,7 +121,7 @@ export default function AdminDepartmentsPage() {
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#d95d39] hover:bg-[#c34e2c] text-white text-xs font-semibold shadow-sm transition-all shrink-0"
+            className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all shrink-0 active:scale-[0.98]"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Register Department</span>
@@ -128,94 +130,106 @@ export default function AdminDepartmentsPage() {
 
         {/* Content */}
         {isLoading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-            <Loader2 className="w-7 h-7 animate-spin text-[#d95d39]" />
-            <p className="text-xs">Loading department roster...</p>
+          <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+            <p className="text-xs font-medium text-slate-500">Loading department roster...</p>
           </div>
         ) : error ? (
-          <div className="p-6 text-center text-destructive bg-destructive/10 border border-destructive/20 rounded-2xl">
-            <AlertCircle className="w-7 h-7 mx-auto mb-2" />
+          <div className="p-6 text-center text-rose-700 bg-rose-50 border border-rose-200 rounded-3xl max-w-lg mx-auto">
+            <AlertCircle className="w-7 h-7 mx-auto mb-2 text-rose-600" />
             <p className="text-xs font-semibold">{error}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {departments.map((dept) => (
               <div
                 key={dept._id}
-                className="p-5 rounded-2xl border border-border bg-card flex flex-col justify-between hover:border-[#d95d39]/40 transition-colors shadow-sm"
+                className="p-6 rounded-3xl border border-slate-200 bg-white flex flex-col justify-between hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/5 transition-all shadow-sm group"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-[#d95d39] font-bold">
-                      <Building2 className="w-5 h-5" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 font-bold group-hover:scale-105 transition-transform">
+                      <Building2 className="w-6 h-6" />
                     </div>
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-secondary text-[#d95d39] border border-border">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-50 text-slate-700 border border-slate-200">
                       {dept.code}
                     </span>
                   </div>
 
-                  <h3 className="text-base font-bold text-foreground mb-1">{dept.name}</h3>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Active Service
+                  <h3 className="text-base font-bold text-slate-900 mb-1">{dept.name}</h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Active Service
                     </span>
                   </div>
 
                   <div>
-                    <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider mb-2 font-mono">
-                      Covered Categories
+                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2">
+                      Handled Issue Categories:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
-                      {dept.categories?.map((cat: ComplaintCategory) => {
-                        const color = CATEGORY_COLORS[cat] || "#14b8a6";
-                        return (
-                          <span
-                            key={cat}
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] bg-secondary border border-border text-foreground font-medium"
-                          >
+                      {dept.categories && dept.categories.length > 0 ? (
+                        dept.categories.map((cat: ComplaintCategory) => {
+                          const catColor = CATEGORY_COLORS[cat] || "#2563eb";
+                          return (
                             <span
-                              className="w-1.5 h-1.5 rounded-full"
-                              style={{ backgroundColor: color }}
-                            />
-                            {cat.replace(/_/g, " ")}
-                          </span>
-                        );
-                      })}
+                              key={cat}
+                              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 font-medium"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: catColor }}
+                              />
+                              <span className="capitalize">{cat.replace(/_/g, " ")}</span>
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No specific categories bound</span>
+                      )}
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span className="flex items-center gap-1 text-[11px]">
+                    <Layers className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{dept.categories?.length || 0} Domains</span>
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Create Department Modal */}
+        {/* Modal: Register New Department */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl">
-              <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  <span>Register New Department</span>
+          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                  <span>Register Municipal Department</span>
                 </h3>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground"
+                  className="p-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
 
               {formError && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs mb-4">
-                  {formError}
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
 
               <form onSubmit={handleCreateDepartment} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Department Name *
                   </label>
                   <input
@@ -224,12 +238,12 @@ export default function AdminDepartmentsPage() {
                     placeholder="e.g. Roads & Bridges Division"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Department Code *
                   </label>
                   <input
@@ -238,25 +252,25 @@ export default function AdminDepartmentsPage() {
                     placeholder="e.g. ROADS"
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground uppercase font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 uppercase font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
                     Civic Categories Handled *
                   </label>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 bg-background border border-border rounded-lg">
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
                     {Object.values(ComplaintCategory).map((cat) => (
                       <label
                         key={cat}
-                        className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-secondary/50 p-1.5 rounded"
+                        className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-white p-2 rounded-lg transition"
                       >
                         <input
                           type="checkbox"
                           checked={selectedCategories.includes(cat)}
                           onChange={() => handleCategoryToggle(cat)}
-                          className="rounded text-primary focus:ring-primary"
+                          className="rounded text-blue-600 focus:ring-blue-500"
                         />
                         <span>{cat.replace(/_/g, " ")}</span>
                       </label>
@@ -264,18 +278,18 @@ export default function AdminDepartmentsPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-secondary text-muted-foreground hover:text-foreground text-xs font-semibold"
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition active:scale-[0.98]"
                   >
                     {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>Create Department</span>
@@ -286,6 +300,5 @@ export default function AdminDepartmentsPage() {
           </div>
         )}
       </div>
-    </AdminShell>
   );
 }

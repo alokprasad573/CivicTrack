@@ -112,6 +112,25 @@ async function runMapTests(): Promise<void> {
   }
   console.log("   -> Route geometry and turn-by-turn maneuvers fully verified\n");
 
+  // 4c. Production mode check: Unconfigured Ola Maps must reject with 503 ROUTING_UNAVAILABLE
+  console.log("4c. Testing production mode failure behavior (no fake route allowed in production):");
+  const prevEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    const prodRes = await request(app)
+      .post("/api/v1/maps/directions")
+      .send({
+        origin: originCoords,
+        destination: destCoords,
+      });
+    if (prodRes.status !== 503 || prodRes.body.error?.code !== "ROUTING_UNAVAILABLE") {
+      throw new Error(`Failed: In production mode without Ola Maps, expected 503 ROUTING_UNAVAILABLE, got ${prodRes.status}`);
+    }
+    console.log("   -> Verified: In production mode without Ola Maps credentials, returns 503 ROUTING_UNAVAILABLE\n");
+  } finally {
+    process.env.NODE_ENV = prevEnv;
+  }
+
   // 5. System Status Check
   console.log("5. GET /api/v1/maps/status");
   const statusRes = await request(app).get("/api/v1/maps/status");
