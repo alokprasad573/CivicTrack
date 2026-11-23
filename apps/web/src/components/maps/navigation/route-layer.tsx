@@ -103,7 +103,7 @@ export function RouteLayer({
           getMapLibre().then(({ LngLatBounds }) => {
             if (!map) return;
             const bounds = new LngLatBounds();
-            route.geometry.coordinates.forEach((coord) => bounds.extend(coord));
+            route.geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
             map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
           }).catch(() => {});
         }

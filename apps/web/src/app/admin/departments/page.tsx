@@ -261,7 +261,7 @@ export default function AdminDepartmentsPage() {
                     Civic Categories Handled *
                   </label>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
-                    {Object.values(ComplaintCategory).map((cat) => (
+                    {(Object.values(ComplaintCategory) as ComplaintCategory[]).map((cat) => (
                       <label
                         key={cat}
                         className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-white p-2 rounded-lg transition"

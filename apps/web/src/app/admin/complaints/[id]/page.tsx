@@ -778,7 +778,7 @@ export default function AdminComplaintDetailPage({
                     onChange={(e) => setVerifyCategory(e.target.value as ComplaintCategory)}
                     className="w-full bg-background border border-border rounded-xl p-2.5 text-xs text-foreground"
                   >
-                    {Object.values(ComplaintCategory).map((cat) => (
+                    {(Object.values(ComplaintCategory) as ComplaintCategory[]).map((cat) => (
                       <option key={cat} value={cat}>
                         {cat.replace(/_/g, " ")}
                       </option>
@@ -793,7 +793,7 @@ export default function AdminComplaintDetailPage({
                     onChange={(e) => setVerifyPriority(e.target.value as ComplaintPriority)}
                     className="w-full bg-background border border-border rounded-xl p-2.5 text-xs text-foreground"
                   >
-                    {Object.values(ComplaintPriority).map((pri) => (
+                    {(Object.values(ComplaintPriority) as ComplaintPriority[]).map((pri) => (
                       <option key={pri} value={pri}>
                         {pri} PRIORITY
                       </option>
@@ -981,7 +981,7 @@ export default function AdminComplaintDetailPage({
                     onChange={(e) => setAssignPriority(e.target.value as ComplaintPriority)}
                     className="w-full bg-background border border-border rounded-xl p-2.5 text-xs text-foreground"
                   >
-                    {Object.values(ComplaintPriority).map((pri) => (
+                    {(Object.values(ComplaintPriority) as ComplaintPriority[]).map((pri) => (
                       <option key={pri} value={pri}>
                         {pri} PRIORITY
                       </option>

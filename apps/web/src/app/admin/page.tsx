@@ -681,7 +681,7 @@ export default function AdminTriagePage() {
               className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">All Categories</option>
-              {Object.values(ComplaintCategory).map((cat) => (
+              {(Object.values(ComplaintCategory) as ComplaintCategory[]).map((cat) => (
                 <option key={cat} value={cat}>
                   {cat.replace(/_/g, " ")}
                 </option>
@@ -694,7 +694,7 @@ export default function AdminTriagePage() {
               className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">All Priorities</option>
-              {Object.values(ComplaintPriority).map((p) => (
+              {(Object.values(ComplaintPriority) as ComplaintPriority[]).map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>

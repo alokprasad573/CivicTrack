@@ -407,12 +407,12 @@ export default function AdminAnalyticsPage() {
                 {(() => {
                   const maxCount = Math.max(
                     1,
-                    ...summary.dailyTrend.flatMap((d) => [d.submitted, d.resolved])
+                    ...summary.dailyTrend.flatMap((d: { submitted: number; resolved: number }) => [d.submitted, d.resolved])
                   );
 
                   return (
                     <div className="h-48 flex items-end gap-2 sm:gap-4 overflow-x-auto pb-2 border-b border-border">
-                      {summary.dailyTrend.map((day) => {
+                      {summary.dailyTrend.map((day: { date: string; submitted: number; resolved: number }) => {
                         const subHeight = Math.max(4, Math.round((day.submitted / maxCount) * 160));
                         const resHeight = Math.max(4, Math.round((day.resolved / maxCount) * 160));
 
@@ -484,7 +484,7 @@ export default function AdminAnalyticsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {summary.departmentBreakdown.map((dept) => {
+                    {summary.departmentBreakdown.map((dept: { departmentId: string; departmentName: string; total: number; resolved: number; overdue: number }) => {
                       const resolutionPct =
                         dept.total > 0 ? Math.round((dept.resolved / dept.total) * 100) : 0;
                       const isCompliant = dept.overdue === 0 && resolutionPct >= 70;
@@ -553,8 +553,8 @@ export default function AdminAnalyticsPage() {
               </div>
 
               <div className="flex flex-col gap-3">
-                {summary.categoryBreakdown.map((cat) => {
-                  const color = CATEGORY_COLORS[cat.category] || "#14b8a6";
+                {summary.categoryBreakdown.map((cat: { category: string; count: number }) => {
+                  const color = CATEGORY_COLORS[cat.category as ComplaintCategory] || "#14b8a6";
                   const percentage =
                     summary.totalComplaints > 0
                       ? Math.round((cat.count / summary.totalComplaints) * 100)
@@ -603,7 +603,7 @@ export default function AdminAnalyticsPage() {
                     Severity Distribution
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {summary.priorityBreakdown.map((prio) => (
+                    {summary.priorityBreakdown.map((prio: { priority: string; count: number }) => (
                       <div
                         key={prio.priority}
                         className="p-2.5 rounded-xl border border-border bg-secondary/30 flex flex-col items-center"
@@ -623,7 +623,7 @@ export default function AdminAnalyticsPage() {
                     Workflow Lifecycle Stage
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {summary.statusBreakdown.map((st) => (
+                    {summary.statusBreakdown.map((st: { status: string; count: number }) => (
                       <div
                         key={st.status}
                         className="p-2 rounded-lg border border-border/60 bg-background text-center"

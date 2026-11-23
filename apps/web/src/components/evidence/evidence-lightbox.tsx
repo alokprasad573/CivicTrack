@@ -230,6 +230,7 @@ export function EvidenceLightbox({
 
         {/* Actual Image */}
         {viewUrl && !imgError && (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={viewUrl}
             alt={filename}
@@ -302,7 +303,7 @@ export function EvidenceLightbox({
           <div className="flex items-center gap-2 overflow-x-auto max-w-full py-0.5">
             {images.map((img, idx) => (
               <button
-                key={idx}
+                key={img.key || img.objectKey || idx}
                 type="button"
                 onClick={() => {
                   setCurrentIndex(idx);
@@ -317,6 +318,7 @@ export function EvidenceLightbox({
                 }`}
               >
                 {img.url ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={img.url}
                     alt={`Thumbnail ${idx + 1}`}

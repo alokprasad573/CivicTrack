@@ -91,7 +91,7 @@ export class ComplaintSubmissionService {
     // Validate upload intents BEFORE persisting to database
     if (dto.evidence && dto.evidence.length > 0) {
       await StorageService.validateUploadIntents({
-        objectKeys: dto.evidence.map((e) => e.objectKey),
+        objectKeys: dto.evidence.map((e: { objectKey: string }) => e.objectKey),
         userId: citizenId,
       });
     }
@@ -110,7 +110,7 @@ export class ComplaintSubmissionService {
     // If evidence was attached, link and update status in UploadIntent tracker
     if (dto.evidence && dto.evidence.length > 0) {
       await StorageService.markEvidenceAttached({
-        objectKeys: dto.evidence.map((e) => e.objectKey),
+        objectKeys: dto.evidence.map((e: { objectKey: string }) => e.objectKey),
         complaintId: complaint._id,
         userId: citizenId,
       });

@@ -47,7 +47,7 @@ router.post(
         departmentId: z.string().optional(),
       }).parse(req.body);
 
-      let departmentId = dto.departmentId || req.user!.departmentId;
+      let departmentId: string | undefined = dto.departmentId || req.user!.departmentId;
       if (dto.role === UserRole.OFFICER && !departmentId) {
         const { DepartmentModel } = await import("../departments/department.model.js");
         const defaultDept = await DepartmentModel.findOne({ isActive: true });
@@ -148,7 +148,7 @@ router.patch(
       const updatedUser = await UserService.updateRoleAndDepartment({
         userId: req.params.id as string,
         role: dto.role,
-        departmentId: dto.departmentId,
+        departmentId: dto.departmentId as string | undefined,
       });
 
       const response: ApiResponse<IUserDocument> = {

@@ -97,19 +97,25 @@ jobs:
     needs: [publish-images]
     steps:
       - name: Trigger Backend Deployment (Deploy Hook)
-        if: env.SERVER_DEPLOY_HOOK_URL != ''
         env:
-          SERVER_DEPLOY_HOOK_URL: ${{ secrets.SERVER_DEPLOY_HOOK_URL }}
+          SERVER_DEPLOY_HOOK_URL: ${{ secrets['SERVER_DEPLOY_HOOK_URL'] }}
         run: |
+          if [ -z "${SERVER_DEPLOY_HOOK_URL}" ]; then
+            echo "SERVER_DEPLOY_HOOK_URL not configured. Skipping backend deploy hook."
+            exit 0
+          fi
           echo "Triggering backend deployment webhook..."
           curl -sS -X POST "${SERVER_DEPLOY_HOOK_URL}"
           echo "Backend deployment webhook successfully dispatched."
 
       - name: Trigger Frontend Deployment (Deploy Hook)
-        if: env.WEB_DEPLOY_HOOK_URL != ''
         env:
-          WEB_DEPLOY_HOOK_URL: ${{ secrets.WEB_DEPLOY_HOOK_URL }}
+          WEB_DEPLOY_HOOK_URL: ${{ secrets['WEB_DEPLOY_HOOK_URL'] }}
         run: |
+          if [ -z "${WEB_DEPLOY_HOOK_URL}" ]; then
+            echo "WEB_DEPLOY_HOOK_URL not configured. Skipping frontend deploy hook."
+            exit 0
+          fi
           echo "Triggering frontend deployment webhook..."
           curl -sS -X POST "${WEB_DEPLOY_HOOK_URL}"
           echo "Frontend deployment webhook successfully dispatched."
@@ -135,15 +141,17 @@ jobs:
     name: Post-Deployment Live Healthcheck
     runs-on: ubuntu-latest
     needs: [deploy-services]
-    if: env.PRODUCTION_API_URL != ''
-    env:
-      PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL || secrets.PRODUCTION_API_URL }}
     steps:
-      - name: Wait for Cloud Instance Warmup
-        run: sleep 15
-
       - name: Probe Server Health Endpoint
+        env:
+          PRODUCTION_API_URL: ${{ vars['PRODUCTION_API_URL'] || secrets['PRODUCTION_API_URL'] }}
         run: |
+          if [ -z "${PRODUCTION_API_URL}" ]; then
+            echo "PRODUCTION_API_URL not configured. Skipping live health check."
+            exit 0
+          fi
+          echo "Waiting 15s for cloud instance warmup..."
+          sleep 15
           TARGET="${PRODUCTION_API_URL%/}/health"
           echo "Probing production health endpoint: ${TARGET}"
           STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${TARGET}" || echo "000")

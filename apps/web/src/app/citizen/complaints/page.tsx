@@ -175,7 +175,7 @@ export default function CitizenComplaintsListPage() {
               className="w-full sm:w-auto px-3.5 py-2.5 text-xs rounded-xl border border-border bg-background text-foreground outline-none focus:ring-2 focus:ring-primary min-h-[44px]"
             >
               <option value="">All Categories</option>
-              {Object.values(ComplaintCategory).map((cat) => (
+              {(Object.values(ComplaintCategory) as ComplaintCategory[]).map((cat) => (
                 <option key={cat} value={cat}>
                   {cat.replace(/_/g, " ")}
                 </option>

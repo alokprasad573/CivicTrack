@@ -105,7 +105,11 @@ export class StaffAuthController {
           path: ["confirmPassword"],
         });
 
-      const dto = RegisterSchema.parse(req.body);
+      const dto = RegisterSchema.parse(req.body) as {
+        email: string;
+        name?: string;
+        password: string;
+      };
 
       const result = await StaffAuthService.adminRegister({
         email: dto.email,

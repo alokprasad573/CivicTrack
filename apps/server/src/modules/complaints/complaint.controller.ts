@@ -140,7 +140,7 @@ export class ComplaintController {
 
       const complaintObj = complaint.toObject ? complaint.toObject() : { ...complaint };
       complaintObj.evidence = populatedEvidence;
-      
+
 
       const response: ApiResponse<any> = {
         success: true,
@@ -370,7 +370,15 @@ export class ComplaintController {
 
   public static async findNearby(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const query = NearbyQuerySchema.parse(req.query);
+      const query = NearbyQuerySchema.parse(req.query) as {
+        lng: number;
+        lat: number;
+        radius: number;
+        category?: ComplaintCategory;
+        status?: string;
+        includeClosed?: boolean;
+        limit?: number;
+      };
 
       const nearbyComplaints = await ComplaintService.findNearby({
         longitude: query.lng,
