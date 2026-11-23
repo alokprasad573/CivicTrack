@@ -16,7 +16,7 @@ COPY packages/config ./packages/config
 COPY apps/web ./apps/web
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --include=dev
 
 # Build shared contracts, then Next.js web application
 RUN npm run build --workspace=@civictrack/contracts

@@ -13,7 +13,7 @@ COPY packages/config ./packages/config
 COPY apps/server ./apps/server
 
 # Install all dependencies (including devDependencies needed for build)
-RUN npm ci
+RUN npm ci --include=dev
 
 # Compile TypeScript packages
 RUN npm run build --workspace=@civictrack/contracts
