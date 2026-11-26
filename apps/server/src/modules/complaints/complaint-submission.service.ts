@@ -216,13 +216,21 @@ export class ComplaintSubmissionService {
     }
     complaint.feedbackSubmittedAt = new Date();
 
+    const previousStatus = complaint.status;
+
     // If currently RESOLVED, advance to CLOSED upon citizen confirmation
     if (complaint.status === ComplaintStatus.RESOLVED) {
       complaint.status = ComplaintStatus.CLOSED;
       complaint.closedAt = new Date();
+    }
 
+    // Persist complaint state before emitting events (Persist-Before-Emit)
+    await complaint.save();
+
+    if (previousStatus === ComplaintStatus.RESOLVED && complaint.status === ComplaintStatus.CLOSED) {
       await ComplaintStatusHistoryModel.create({
         complaintId: complaint._id,
+        fromStatus: previousStatus,
         toStatus: ComplaintStatus.CLOSED,
         actorId: new Types.ObjectId(user.id),
         remarks: `Citizen submitted feedback (${dto.rating}/5 stars) and closed complaint.`,
@@ -248,8 +256,6 @@ export class ComplaintSubmissionService {
         assignedOfficerId: complaint.assignedOfficerId ? complaint.assignedOfficerId.toString() : undefined,
       });
     }
-
-    await complaint.save();
 
     logger.info("Citizen feedback submitted", {
       complaintId: complaint._id.toString(),

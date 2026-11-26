@@ -283,7 +283,7 @@ async function runStaffAuthTests(): Promise<void> {
     }
     console.log("   -> Admin login verified, HttpOnly cookies issued successfully\n");
 
-    const adminToken = adminLoginRes.body.data.accessToken;
+    let adminToken = adminLoginRes.body.data.accessToken;
 
     // TEST 2: Officer login with valid credentials
     console.log("2. Testing Officer Login with valid credentials:");
@@ -349,6 +349,7 @@ async function runStaffAuthTests(): Promise<void> {
 
     const refreshRes = await request(app)
       .post("/api/v1/admin/auth/refresh")
+      .set("Origin", "http://localhost:3000")
       .set("Cookie", [`civictrack_admin_refresh=${refreshVal}`])
       .send();
 
@@ -356,12 +357,14 @@ async function runStaffAuthTests(): Promise<void> {
     if (refreshRes.status !== 200 || !refreshRes.body.data?.accessToken) {
       throw new Error("Failed: Refresh must return 200 with rotated accessToken");
     }
+    adminToken = refreshRes.body.data.accessToken;
     console.log("   -> Refresh token rotated successfully\n");
 
     // TEST 7: Replay of used refresh token must be rejected
     console.log("7. Testing Replay attack rejection (reusing old refresh token):");
     const replayRes = await request(app)
       .post("/api/v1/admin/auth/refresh")
+      .set("Origin", "http://localhost:3000")
       .set("Cookie", [`civictrack_admin_refresh=${refreshVal}`])
       .send();
 
@@ -377,7 +380,7 @@ async function runStaffAuthTests(): Promise<void> {
       .get("/api/v1/admin/auth/me")
       .set("Cookie", [`civictrack_admin_token=${adminToken}`]);
 
-    console.log("   Status:", meRes.status);
+    console.log("   Status:", meRes.status); console.log("   Body:", JSON.stringify(meRes.body));
     if (meRes.status !== 200 || meRes.body.data?.email !== "test.admin@civictrack.org") {
       throw new Error("Failed: /admin/auth/me must return 200 with verified admin profile");
     }
@@ -399,6 +402,7 @@ async function runStaffAuthTests(): Promise<void> {
     console.log("10. Testing Staff Logout:");
     const logoutRes = await request(app)
       .post("/api/v1/admin/auth/logout")
+      .set("Origin", "http://localhost:3000")
       .set("Cookie", [`civictrack_admin_refresh=${refreshVal}`]);
 
     console.log("   Status:", logoutRes.status);
