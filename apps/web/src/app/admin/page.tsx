@@ -76,6 +76,11 @@ export default function AdminTriagePage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,7 +177,7 @@ export default function AdminTriagePage() {
     if (statusFilter) params.set("status", statusFilter);
     if (categoryFilter) params.set("category", categoryFilter);
     if (priorityFilter) params.set("priority", priorityFilter);
-    if (searchTerm) params.set("search", searchTerm);
+    if (debouncedSearch) params.set("search", debouncedSearch);
 
     try {
       const res = await fetch(`/api/v1/complaints?${params.toString()}`);
@@ -196,7 +201,7 @@ export default function AdminTriagePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, statusFilter, categoryFilter, priorityFilter, searchTerm]);
+  }, [page, statusFilter, categoryFilter, priorityFilter, debouncedSearch]);
 
   // Load active departments once
   useEffect(() => {

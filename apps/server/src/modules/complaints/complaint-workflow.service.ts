@@ -1,9 +1,10 @@
 import { Types } from "mongoose";
 import { ComplaintModel, IComplaintDocument } from "./complaint.model.js";
 import { ComplaintStatusHistoryModel } from "./complaint-history.model.js";
+import { SlaEscalationModel } from "../sla/sla-escalation.model.js";
 import { DepartmentService } from "../departments/department.service.js";
 import { StorageService } from "../storage/storage.service.js";
-import { S3Service } from "../storage/s3.service.js";
+
 import { UserModel } from "../users/user.model.js";
 import { ComplaintQueryService } from "./complaint-query.service.js";
 import {
@@ -298,22 +299,33 @@ export class ComplaintWorkflowService {
     const updateSet: Record<string, unknown> = {
       status: ComplaintStatus.ASSIGNED,
       departmentId: new Types.ObjectId(dto.departmentId),
-      assignedOfficerId: dto.assignedOfficerId ? new Types.ObjectId(dto.assignedOfficerId) : undefined,
     };
+
+    if (dto.assignedOfficerId) {
+      updateSet.assignedOfficerId = new Types.ObjectId(dto.assignedOfficerId);
+    }
 
     if (dto.priority) {
       updateSet.priority = dto.priority;
     }
     if (dto.dueAt) {
       updateSet.dueAt = dto.dueAt;
+    } else if (dto.priority && dto.priority !== complaint.priority) {
+      // Recalculate dueAt when priority changes
+      updateSet.dueAt = calculateDueAt(dto.priority, complaint.category);
     } else if (!complaint.dueAt) {
       const priority = dto.priority || complaint.priority;
       updateSet.dueAt = calculateDueAt(priority, complaint.category);
     }
 
+    const update: Record<string, unknown> = { $set: updateSet };
+    if (!dto.assignedOfficerId) {
+      update.$unset = { assignedOfficerId: "" };
+    }
+
     const updated = await ComplaintModel.findOneAndUpdate(
       { _id: complaint._id, status: complaint.status },
-      { $set: updateSet },
+      update,
       { new: true }
     );
 
@@ -494,29 +506,18 @@ export class ComplaintWorkflowService {
       });
     }
 
-    // Populate pre-signed S3 URL so that the URL is stored directly in DB
-    const resolvedEvidenceWithUrls = await Promise.all(
-      evidenceToAttach.map(async (item: any) => {
-        const key = item.objectKey || item.key;
-        let url = item.url;
-        if (!url && key) {
-          try {
-            url = await S3Service.generatePresignedViewUrl(key);
-          } catch {
-            url = item.url || "";
-          }
-        }
-        return {
-          objectKey: key,
-          key,
-          contentType: item.contentType || item.mimeType || "image/jpeg",
-          size: item.size || 0,
-          url,
-          originalName: item.originalName || "Officer Resolution Proof",
-          uploadedAt: item.uploadedAt || new Date(),
-        };
-      })
-    );
+    // Store evidence object-key metadata only (no expiring S3 URLs); fresh URLs via view-url
+    const resolvedEvidenceWithUrls = evidenceToAttach.map((item: any) => {
+      const key = item.objectKey || item.key;
+      return {
+        objectKey: key,
+        key,
+        contentType: item.contentType || item.mimeType || "image/jpeg",
+        size: item.size || 0,
+        originalName: item.originalName || "Officer Resolution Proof",
+        uploadedAt: item.uploadedAt || new Date(),
+      };
+    });
 
     const updated = await ComplaintModel.findOneAndUpdate(
       { _id: complaint._id, status: complaint.status },
@@ -533,6 +534,14 @@ export class ComplaintWorkflowService {
 
     if (!updated) {
       throw new ConflictError("Complaint was modified concurrently. Please refresh.");
+    }
+
+    // Mark any pending SLA escalation as resolved
+    if (SlaEscalationModel.db.readyState === 1) {
+      await SlaEscalationModel.updateMany(
+        { complaintId: complaint._id, isResolved: false },
+        { $set: { isResolved: true } }
+      );
     }
 
     await ComplaintStatusHistoryModel.create({
@@ -614,6 +623,14 @@ export class ComplaintWorkflowService {
 
     if (!updated) {
       throw new ConflictError("Complaint was modified concurrently. Please refresh.");
+    }
+
+    // Mark any pending SLA escalation as resolved
+    if (SlaEscalationModel.db.readyState === 1) {
+      await SlaEscalationModel.updateMany(
+        { complaintId: complaint._id, isResolved: false },
+        { $set: { isResolved: true } }
+      );
     }
 
     await ComplaintStatusHistoryModel.create({
