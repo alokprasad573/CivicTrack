@@ -16,13 +16,17 @@ You are the Principal Engineer and Master Orchestrator. Execute the approved mod
 5. Phase 0 and Phase 1 are read-only/audit and architecture-lock. Do not begin implementation until complete audit coverage, guardrails and task ownership are documented and the plan is approved.
 
 ## Objective A — UI redesign
-Transform every current CivicTrack screen into Apple-inspired, premium minimalist UI/UX:
-- Keep the existing CivicTrack color palette and semantic colors; refine, do not replace the identity.
-- Typography-led hierarchy, elegant scale/weights/line heights, disciplined spacing, grid alignment, generous whitespace and restrained motion.
-- Neutral surfaces, subtle borders/dividers and restrained shadows; simple controls and data-dense dashboards remain usable.
-- Consistent shared components for navigation, headers, buttons, fields, cards, tables, dialogs, alerts, status indicators, skeleton/loading, empty and error states.
-- Responsive mobile/tablet/desktop layouts and WCAG-conscious contrast, keyboard navigation, visible focus and reduced-motion support.
-- Use installed packages and current Tailwind/CSS architecture. Do not add a UI library or copy Apple's proprietary branding/assets.
+Recreate Apple's website UI with high visual fidelity across CivicTrack—not just an Apple-inspired theme. Treat Apple.com as the visual reference for layout, navigation, typography, spacing, editorial composition, surfaces, responsiveness and motion:
+- **High-fidelity target:** use the current Apple.com website as the concrete visual reference. Before coding, inspect reference pages and capture desktop, tablet and mobile screenshots. Aim for close visual parity in layout proportions, navigation, typography scale, whitespace, section rhythm, full-width/edge-to-edge media composition, restrained surfaces and interactions.
+- Recreate Apple's slim navigation, editorial hero sections, oversized but carefully typeset headings, generous spacing, controlled content widths, clean grids, understated dividers, refined buttons and polished hover/focus/menu states.
+- Public CivicTrack landing page should follow the closest Apple.com landing-page composition. Apply the same system across citizen, officer, admin and auth pages, adapting it to operational dashboard usability and real data density.
+- Retain CivicTrack's existing palette for brand accents, actions and semantic statuses; use the refined neutral page foundation and typography/layout treatment seen on Apple.com. Do not replace CivicTrack's product identity or civic content.
+- Use existing/legal system fonts and assets. Do not copy Apple's logo, proprietary fonts, product imagery/video, marketing copy or other protected assets; do not imply Apple affiliation.
+- Recreate restrained motion and transition behavior where suitable; no scroll-jacking, and honor prefers-reduced-motion.
+- Keep all existing controls, handlers, validation, API calls, routes, permissions, maps and realtime behavior. No fake UI or decorative controls.
+- Build a route-by-route reference matrix and write `docs/UI_VISUAL_SPEC.md` before implementation, documenting references, screenshots, breakpoints, typography, spacing, components and interaction states.
+- Use installed packages and current Tailwind/CSS architecture. No new UI library/font dependency without explicit approval.
+- Validate desktop/tablet/mobile screenshots side-by-side against the reference and verify accessibility, contrast, keyboard navigation and reduced motion.
 
 Review public, citizen, officer, admin, auth, report, complaint tracking/detail, analytics, departments/staff, maps/navigation, notifications and evidence screens. Preserve ALL existing handlers, validation, API calls/payloads, route permissions, feature semantics, realtime subscriptions and map behavior. No fake buttons, dead links, removed actions or placeholder data.
 

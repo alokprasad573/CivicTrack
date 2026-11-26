@@ -7,7 +7,7 @@
 
 ## 1. Outcomes
 
-1. Modernize every existing frontend route into a cohesive, premium, Apple-inspired minimalist interface while retaining CivicTrack's existing color palette and brand identity.
+1. Recreate the visual experience of Apple's website with high fidelity across CivicTrack's existing frontend: closely matching Apple.com’s page composition, navigation, typography, whitespace, surfaces, imagery treatment, responsive behavior and motion—not merely applying a generic Apple-inspired theme. Retain CivicTrack's name, content, product identity and functional semantics.
 2. Improve typography, spacing, visual hierarchy, responsive behavior, accessibility and interaction consistency using the existing design/styling stack.
 3. Audit and repair bugs and existing end-to-end workflows without changing user-visible product scope.
 4. Improve Next.js page transitions, initial load, hydration, assets, bundles and SEO.
@@ -82,10 +82,27 @@ Create `docs/IMPLEMENTATION_GUARDRAILS.md` documenting the actual endpoints/cont
 ### Phase 2 — Plan checkpoint and task ownership
 Convert evidence into task IDs, severity, priority, exact file ownership, dependencies, acceptance tests, performance/security impact and rollback. Maintain `docs/IMPLEMENTATION_PROGRESS.md`. Owner/orchestrator approval is required before source implementation.
 
-### Phase 3 — Apple-inspired minimalist UI
-First define tokens and shared components using current CSS variables/Tailwind and preserve the existing palette. Desired visual language: restrained, refined, spacious, high-contrast and typography-led; precise alignment, consistent rhythm, simple surfaces, subtle separators, minimal shadows, intentional whitespace, restrained motion and clear hierarchy. Do not copy Apple's branding, logos or proprietary assets.
+### Phase 3 — High-fidelity Apple.com-style website recreation
 
-Review/redesign every existing public, citizen, officer, admin, auth, reporting, tracking, analytics, maps, notification, navigation and evidence route. Standardize headers, sidebars, cards, tables, forms, buttons, dialogs, status indicators, empty/loading/error states. Optimize type scale, line height, font weights, letter spacing and responsive wrapping. Reuse installed fonts/packages or built-in framework capabilities; no new UI library. Respect existing brand colors and semantic status colors. Preserve all handlers, validation, access checks, API calls, route behavior, map interactions and Socket.IO subscriptions. Include keyboard/focus/reduced-motion/contrast checks.
+This is a **near-clone visual target**, not a loose “Apple-inspired” interpretation. Before coding, inspect the current live Apple website and capture reference screenshots for the relevant page patterns at desktop, tablet and mobile widths. Build a route-by-route visual reference matrix that identifies which Apple.com pattern each CivicTrack page should follow.
+
+Aim for close visual parity in the following areas:
+- **Global navigation:** slim, clean, horizontally balanced navigation; precise spacing; restrained translucent/solid surfaces where appropriate; polished dropdown/mobile navigation behavior.
+- **Hero composition:** large editorial headlines, carefully controlled line lengths, strong scale contrast, generous top/bottom whitespace, centered or deliberately asymmetric layouts, and clear primary/secondary actions.
+- **Typography:** reproduce Apple's typography hierarchy and rhythm as closely as practical using legally available/system fonts already in the stack; tune font size, weight, tracking, line height and responsive scaling rather than simply changing the font family.
+- **Page rhythm and layout:** wide content stages, deliberate max-widths, full-bleed sections where suitable, editorial grid composition, consistent gutters, large section spacing and clear transitions between sections.
+- **Surfaces and controls:** minimal chrome, fine separators, subtle radii, restrained shadows, carefully aligned buttons, understated form controls, refined hover/focus/active states.
+- **Imagery and media:** large, intentional media regions, consistent aspect ratios, clean crops, restrained backgrounds and loading behavior. Use CivicTrack-owned or properly licensed imagery/illustrations; never hotlink or copy Apple's product images, videos, logos, page text or proprietary assets.
+- **Motion and interaction:** reproduce the *behavioral feel* of Apple's polished transitions—subtle reveal, hover, sticky/scroll-linked section behavior and responsive menu transitions—only where appropriate and performant. Respect reduced-motion preferences; avoid scroll-jacking and unnecessary animation.
+- **Responsive fidelity:** intentionally recreate desktop, tablet and mobile compositions rather than merely shrinking desktop layouts.
+
+Apply the closest Apple.com marketing/landing-page composition to CivicTrack's public landing page. Bring the same visual system into citizen, officer, admin, authentication, reporting, tracking, analytics, maps, notifications and evidence screens, adapting the layout to real data density and task workflows. Authenticated screens must remain usable operational dashboards; do not turn data tables or forms into decorative marketing sections.
+
+**Brand and content boundary:** keep CivicTrack's name, copy, civic domain language, routes, functionality and recognizable brand identity. Retain the existing CivicTrack palette for brand accents, primary actions and semantic status colors, while using Apple's restrained neutral visual treatment for the page foundation. Do not use Apple's logo, product names, proprietary fonts/assets, copied marketing copy or imply affiliation with Apple.
+
+Before implementation, document the chosen Apple.com reference pages, screenshots, route mapping, typography scale, spacing scale, breakpoints, component states and motion rules in `docs/UI_VISUAL_SPEC.md`. The UI agent owns this file and all shared visual tokens. Use existing CSS variables/Tailwind and installed capabilities; do not add a new UI library or font dependency without approval.
+
+Redesign every existing route and shared component while preserving all handlers, form validation, access checks, API calls/payloads, navigation, map interactions and Socket.IO subscriptions. Include keyboard/focus/contrast/reduced-motion checks. Perform side-by-side screenshot review at agreed viewport sizes and fix material visual mismatches before marking a route complete.
 
 ### Phase 4 — Existing workflow and bug integrity
 Trace every feature end-to-end for citizen, officer, admin and platform integrations. Cover success, validation, unauthorized/forbidden, not-found/conflict, timeout, partial failure, retry/reconnect and concurrent actions. Verify ownership, creator-based isolation, atomic state transitions, audit history, persist-before-emit and stale-state reconciliation. Fix confirmed internal defects with regression tests. Do not change public contracts or feature semantics.
