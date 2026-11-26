@@ -22,7 +22,7 @@ const SpatialMapPreview = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[460px] rounded-3xl border border-border bg-card flex flex-col items-center justify-center gap-3 shadow-xs">
+      <div className="w-full h-[460px] rounded-3xl border border-border bg-card flex flex-col items-center justify-center gap-3 shadow-hairline">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
         <span className="text-xs text-muted-foreground font-medium">
           Loading Spatial Map Preview...
@@ -213,7 +213,7 @@ export default function CitizenDashboardPage() {
   return (
       <div className="space-y-8">
         {/* Welcome Banner */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card p-6 sm:p-8 rounded-3xl border border-border shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card p-6 sm:p-8 rounded-3xl border border-border shadow-hairline">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-2 border border-primary/20">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -264,13 +264,13 @@ export default function CitizenDashboardPage() {
             return (
               <div
                 key={idx}
-                className="rounded-3xl border border-border bg-card p-6 flex items-center justify-between shadow-xs hover:shadow-md transition-shadow"
+                className="rounded-3xl border border-border bg-card p-6 flex items-center justify-between shadow-hairline hover:shadow-elevated transition-shadow"
               >
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground">{kpi.label}</p>
                   <p className="text-3xl font-bold mt-1.5 tabular-nums text-foreground">{kpi.value}</p>
                 </div>
-                <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-xs ${kpi.iconBg}`}>
+                <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-hairline ${kpi.iconBg}`}>
                   <Icon className="w-6 h-6" />
                 </div>
               </div>
@@ -303,7 +303,7 @@ export default function CitizenDashboardPage() {
             )}
 
             {isLoading ? (
-              <div className="h-64 rounded-3xl border border-border bg-card flex flex-col items-center justify-center gap-2 shadow-xs">
+              <div className="h-64 rounded-3xl border border-border bg-card flex flex-col items-center justify-center gap-2 shadow-hairline">
                 <Loader2 className="w-7 h-7 text-primary animate-spin" />
                 <span className="text-xs text-muted-foreground">Loading your complaints...</span>
               </div>
@@ -319,7 +319,7 @@ export default function CitizenDashboardPage() {
                 <div className="pt-2">
                   <Link
                     href="/citizen/report"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 transition"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground shadow-hairline hover:bg-primary/90 transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Report Now</span>
@@ -335,7 +335,7 @@ export default function CitizenDashboardPage() {
                     <Link
                       key={compId}
                       href={`/citizen/complaints/${compId}`}
-                      className="block p-5 rounded-2xl border border-border bg-card hover:border-primary/40 hover:shadow-md transition-all group"
+                      className="block p-5 rounded-2xl border border-border bg-card hover:border-primary/40 hover:shadow-elevated transition-all group"
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2 truncate">
@@ -398,7 +398,7 @@ export default function CitizenDashboardPage() {
                 onClick={() => setShowClosedOnMap((prev) => !prev)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                   showClosedOnMap
-                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-xs"
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-hairline"
                     : "bg-secondary text-muted-foreground hover:text-foreground border-border"
                 }`}
                 title={showClosedOnMap ? "Closed complaints are shown on map. Click to hide." : "Closed complaints are hidden from map. Click to show."}
@@ -439,7 +439,7 @@ export default function CitizenDashboardPage() {
               </div>
             )}
 
-            <div className="rounded-3xl border border-border bg-card p-2 shadow-xs overflow-hidden">
+            <div className="rounded-3xl border border-border bg-card p-2 shadow-hairline overflow-hidden">
               <SpatialMapPreview
                 height="460px"
                 complaints={mapComplaintItems}

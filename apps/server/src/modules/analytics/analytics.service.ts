@@ -11,9 +11,6 @@ import {
 import { ValidationError, ServiceUnavailableError } from "../../common/errors/app-error.js";
 
 export class AnalyticsService {
-  /**
-   * Get server-side aggregated municipal operational analytics
-   */
   public static async getSummary(filter: AnalyticsFilterDto, adminDepartmentIds?: string[]): Promise<IAnalyticsSummary> {
     if (ComplaintModel.db.readyState !== 1) {
       if (process.env.NODE_ENV === "production") {
@@ -22,7 +19,6 @@ export class AnalyticsService {
       return this.getEmptySummary();
     }
 
-    // If an administrator has not created any departments, analytics metrics are zeroed
     if (adminDepartmentIds !== undefined && adminDepartmentIds.length === 0) {
       return this.getEmptySummary();
     }
@@ -45,238 +41,48 @@ export class AnalyticsService {
     }
 
     const now = new Date();
+    const trendStart = filter.startDate ? filter.startDate : new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
-    const trendMatch: Record<string, unknown> = { ...matchQuery };
-    if (!trendMatch.createdAt) {
-      trendMatch.createdAt = { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) };
-    }
-
-    const [
-      overallStats,
-      categoryStats,
-      departmentStats,
-      statusStats,
-      priorityStats,
-      dailyTrend,
-      departments,
-    ] = await Promise.all([
-      // 1. Overall Stats
+    const [facetResult, departments] = await Promise.all([
       ComplaintModel.aggregate([
         { $match: matchQuery },
         {
-          $group: {
-            _id: null,
-            totalComplaints: { $sum: 1 },
-            resolvedComplaints: {
-              $sum: {
-                $cond: [
-                  { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                  1,
-                  0,
-                ],
+          $facet: {
+            overall: [
+              {
+                $group: {
+                  _id: null,
+                  totalComplaints: { $sum: 1 },
+                  resolvedComplaints: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, 1, 0] } },
+                  pendingComplaints: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.SUBMITTED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.VERIFIED]] }, 1, 0] } },
+                  inProgressComplaints: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.ASSIGNED, ComplaintStatus.IN_PROGRESS]] }, 1, 0] } },
+                  overdueCount: { $sum: { $cond: [{ $and: [{ $not: { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED, ComplaintStatus.REJECTED]] } }, { $ne: ["$dueAt", null] }, { $lt: ["$dueAt", now] }] }, 1, 0] } },
+                  slaMetCount: { $sum: { $cond: [{ $and: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, { $ne: ["$dueAt", null] }, { $ne: ["$resolvedAt", null] }, { $lte: ["$resolvedAt", "$dueAt"] }] }, 1, 0] } },
+                  slaTotalCount: { $sum: { $cond: [{ $and: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, { $ne: ["$dueAt", null] }] }, 1, 0] } },
+                  totalResolutionMillis: { $sum: { $cond: [{ $and: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, { $ne: ["$resolvedAt", null] }] }, { $subtract: ["$resolvedAt", "$createdAt"] }, 0] } },
+                },
               },
-            },
-            pendingComplaints: {
-              $sum: {
-                $cond: [
-                  {
-                    $in: [
-                      "$status",
-                      [ComplaintStatus.SUBMITTED, ComplaintStatus.UNDER_REVIEW, ComplaintStatus.VERIFIED],
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            inProgressComplaints: {
-              $sum: {
-                $cond: [
-                  { $in: ["$status", [ComplaintStatus.ASSIGNED, ComplaintStatus.IN_PROGRESS]] },
-                  1,
-                  0,
-                ],
-              },
-            },
-            overdueCount: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      {
-                        $not: {
-                          $in: [
-                            "$status",
-                            [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED, ComplaintStatus.REJECTED],
-                          ],
-                        },
-                      },
-                      { $ne: ["$dueAt", null] },
-                      { $lt: ["$dueAt", now] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            slaMetCount: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                      { $ne: ["$dueAt", null] },
-                      { $ne: ["$resolvedAt", null] },
-                      { $lte: ["$resolvedAt", "$dueAt"] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            slaTotalCount: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                      { $ne: ["$dueAt", null] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            totalResolutionMillis: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                      { $ne: ["$resolvedAt", null] },
-                    ],
-                  },
-                  { $subtract: ["$resolvedAt", "$createdAt"] },
-                  0,
-                ],
-              },
-            },
+            ],
+            category: [
+              { $group: { _id: "$category", count: { $sum: 1 }, resolvedCount: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, 1, 0] } } } },
+            ],
+            department: [
+              { $group: { _id: "$departmentId", total: { $sum: 1 }, resolved: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, 1, 0] } }, overdue: { $sum: { $cond: [{ $and: [{ $not: { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED, ComplaintStatus.REJECTED]] } }, { $ne: ["$dueAt", null] }, { $lt: ["$dueAt", now] }] }, 1, 0] } } } },
+            ],
+            status: [
+              { $group: { _id: "$status", count: { $sum: 1 } } },
+            ],
+            priority: [
+              { $group: { _id: "$priority", count: { $sum: 1 } } },
+            ],
+            trend: [
+              { $match: { createdAt: { $gte: trendStart } } },
+              { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, submitted: { $sum: 1 }, resolved: { $sum: { $cond: [{ $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] }, 1, 0] } } } },
+              { $sort: { _id: 1 } },
+            ],
           },
         },
       ]),
-
-      // 2. Category Breakdown
-      ComplaintModel.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$category",
-            count: { $sum: 1 },
-            resolvedCount: {
-              $sum: {
-                $cond: [
-                  { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                  1,
-                  0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
-
-      // 3. Department Breakdown
-      ComplaintModel.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$departmentId",
-            total: { $sum: 1 },
-            resolved: {
-              $sum: {
-                $cond: [
-                  { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                  1,
-                  0,
-                ],
-              },
-            },
-            overdue: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      {
-                        $not: {
-                          $in: [
-                            "$status",
-                            [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED, ComplaintStatus.REJECTED],
-                          ],
-                        },
-                      },
-                      { $ne: ["$dueAt", null] },
-                      { $lt: ["$dueAt", now] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
-
-      // 4. Status Breakdown
-      ComplaintModel.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$status",
-            count: { $sum: 1 },
-          },
-        },
-      ]),
-
-      // 5. Priority Breakdown
-      ComplaintModel.aggregate([
-        { $match: matchQuery },
-        {
-          $group: {
-            _id: "$priority",
-            count: { $sum: 1 },
-          },
-        },
-      ]),
-
-      // 6. Daily Trend (applies matching department/date filters)
-      ComplaintModel.aggregate([
-        {
-          $match: trendMatch,
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            submitted: { $sum: 1 },
-            resolved: {
-              $sum: {
-                $cond: [
-                  { $in: ["$status", [ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED]] },
-                  1,
-                  0,
-                ],
-              },
-            },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-
-      // 7. Departments list for names
       DepartmentModel.find(
         adminDepartmentIds
           ? { _id: { $in: adminDepartmentIds.map((id) => new Types.ObjectId(id)) } }
@@ -286,7 +92,9 @@ export class AnalyticsService {
         .lean(),
     ]);
 
-    const stats = overallStats[0] || {
+    const facet = facetResult[0] || {};
+    const overallArr = facet.overall || [];
+    const stats = overallArr[0] || {
       totalComplaints: 0,
       resolvedComplaints: 0,
       pendingComplaints: 0,
@@ -316,7 +124,7 @@ export class AnalyticsService {
       deptMap.set(d._id.toString(), d.name);
     }
 
-    const departmentBreakdown = departmentStats.map((item) => ({
+    const departmentBreakdown = (facet.department || []).map((item: any) => ({
       departmentId: item._id ? item._id.toString() : "unassigned",
       departmentName: item._id ? deptMap.get(item._id.toString()) || "Department" : "Unassigned",
       total: item.total,
@@ -324,23 +132,23 @@ export class AnalyticsService {
       overdue: item.overdue,
     }));
 
-    const categoryBreakdown = categoryStats.map((item) => ({
+    const categoryBreakdown = (facet.category || []).map((item: any) => ({
       category: item._id as ComplaintCategory,
       count: item.count,
       resolvedCount: item.resolvedCount,
     }));
 
-    const statusBreakdown = statusStats.map((item) => ({
+    const statusBreakdown = (facet.status || []).map((item: any) => ({
       status: item._id as ComplaintStatus,
       count: item.count,
     }));
 
-    const priorityBreakdown = priorityStats.map((item) => ({
+    const priorityBreakdown = (facet.priority || []).map((item: any) => ({
       priority: item._id as ComplaintPriority,
       count: item.count,
     }));
 
-    const dailyTrendFormatted = dailyTrend.map((item) => ({
+    const dailyTrendFormatted = (facet.trend || []).map((item: any) => ({
       date: item._id as string,
       submitted: item.submitted,
       resolved: item.resolved,

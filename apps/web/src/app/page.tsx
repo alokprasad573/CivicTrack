@@ -86,7 +86,7 @@ export default async function HomePage() {
       {/* Main Content Area */}
       <main className="flex-1">
         {/* Section 1: Hero */}
-        <section className="border-b border-slate-200/80 bg-background py-16 sm:py-20 lg:py-24">
+        <section className="border-b border-slate-200/80 bg-blue-600 py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
               {/* Left Column: Heading, Value Prop, CTAs */}

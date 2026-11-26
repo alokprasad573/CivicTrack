@@ -199,6 +199,7 @@ async function runStorageTests(): Promise<void> {
   const officerId = "673f11112222333344445555";
   const resolutionIntents = await StorageService.createUploadIntents({
     userId: officerId,
+    userRole: UserRole.OFFICER,
     dto: {
       folder: "resolved",
       files: [

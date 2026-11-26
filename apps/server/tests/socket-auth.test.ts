@@ -102,8 +102,8 @@ async function runSocketAuthTests(): Promise<void> {
   if (citizenInDept) {
     throw new Error("Failed: Citizen must be denied entry to department rooms");
   }
-  if (!adminInDept) {
-    throw new Error("Failed: Admin must have access to all department rooms");
+  if (adminInDept) {
+    throw new Error("Failed: Admin must not have access to other admins department rooms (creator isolation)");
   }
   console.log("   -> Department rooms strictly scoped by assignment and role\n");
 
@@ -182,7 +182,7 @@ async function runSocketAuthTests(): Promise<void> {
       const complaint1 = await ComplaintModel.create({
         referenceNumber: `CT-SOCK-${Date.now()}`,
         title: "Pothole Test",
-        description: "Test pothole",
+        description: "Test pothole description long enough for validation",
         category: ComplaintCategory.ROADS_POTHOLES,
         citizenId: dbCit1._id,
         status: ComplaintStatus.ASSIGNED,
@@ -192,8 +192,8 @@ async function runSocketAuthTests(): Promise<void> {
         location: {
           type: "Point",
           coordinates: [77.5946, 12.9716],
-          address: { formattedAddress: "Bangalore" },
         },
+        address: "Bangalore",
         auditTrail: [{ action: "CREATED", performedBy: dbCit1._id, performedByRole: UserRole.CITIZEN, timestamp: new Date() }],
       });
 

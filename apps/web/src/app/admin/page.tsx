@@ -735,7 +735,7 @@ export default function AdminTriagePage() {
                 onClick={() => setShowClosedOnMap((prev) => !prev)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                   showClosedOnMap
-                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-xs"
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-hairline"
                     : "bg-secondary text-muted-foreground hover:text-foreground border-border"
                 }`}
                 title={showClosedOnMap ? "Closed complaints are shown on map. Click to hide." : "Closed complaints are hidden from map. Click to show."}

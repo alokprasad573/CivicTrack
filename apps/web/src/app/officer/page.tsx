@@ -344,7 +344,7 @@ export default function OfficerDashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-semibold text-xs shadow-xs">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-semibold text-xs shadow-hairline">
             <Wrench className="w-3.5 h-3.5" />
             <span>{total} Assigned Tasks</span>
           </span>
