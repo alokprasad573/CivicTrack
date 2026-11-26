@@ -1,12 +1,10 @@
-"use client";
+import type { Metadata } from "next";
+import CitizenPortalGate from "../../components/layout/citizen-portal-gate";
 
-import React from "react";
-import { CitizenShell } from "../../components/layout/citizen-shell";
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
-export default function CitizenLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <CitizenShell>{children}</CitizenShell>;
+export default function CitizenLayout({ children }: { children: React.ReactNode }) {
+  return <CitizenPortalGate>{children}</CitizenPortalGate>;
 }

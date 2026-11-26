@@ -1,20 +1,10 @@
-"use client";
+import type { Metadata } from "next";
+import OfficerPortalGate from "../../components/layout/officer-portal-gate";
 
-import React from "react";
-import { usePathname } from "next/navigation";
-import { OfficerShell } from "../../components/layout/officer-shell";
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
-export default function OfficerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-
-  // If on login or registration screen, render directly without the authenticated OfficerShell chrome
-  if (pathname.startsWith("/officer/login") || pathname.startsWith("/officer/register")) {
-    return <>{children}</>;
-  }
-
-  return <OfficerShell>{children}</OfficerShell>;
+export default function OfficerLayout({ children }: { children: React.ReactNode }) {
+  return <OfficerPortalGate>{children}</OfficerPortalGate>;
 }

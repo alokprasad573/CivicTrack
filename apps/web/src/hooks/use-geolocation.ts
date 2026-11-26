@@ -129,33 +129,8 @@ export function useGeolocation(autoStart = false) {
               handleSuccess(pos2, "network");
               resolve(coords);
             },
-            async () => {
-              // Tier 3: Approximate via IP geolocation or standard municipal center
-              try {
-                const ipRes = await fetch("https://ipapi.co/json/", {
-                  signal: AbortSignal.timeout(3000),
-                });
-                if (ipRes.ok) {
-                  const ipData = await ipRes.json();
-                  if (ipData.longitude && ipData.latitude) {
-                    const coords: Coordinates = [ipData.longitude, ipData.latitude];
-                    setState((prev) => ({
-                      ...prev,
-                      coords,
-                      accuracy: 1500,
-                      isTracking: false,
-                      permissionGranted: true,
-                      source: "ip",
-                      error: null,
-                    }));
-                    resolve(coords);
-                    return;
-                  }
-                }
-              } catch {
-                // Silently fallback to municipal center
-              }
-
+            () => {
+              // Tier 3: Fall back to municipal center (no external IP lookup)
               const fallback = DEFAULT_MAP_CENTER;
               setState((prev) => ({
                 ...prev,

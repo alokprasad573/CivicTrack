@@ -21,6 +21,7 @@ RUN npm ci --include=dev
 # Build shared contracts, then Next.js web application
 RUN npm run build --workspace=@civictrack/contracts
 RUN npm run build --workspace=@civictrack/web
+RUN npm prune --omit=dev
 
 # 2. Production runtime stage
 FROM node:24-alpine AS runner

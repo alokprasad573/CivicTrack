@@ -3,10 +3,39 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ToastProvider } from "../components/ui/toast-context";
 import "./globals.css";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://civictrack.example.com";
+
 export const metadata: Metadata = {
-  title: "CivicTrack — Smart Civic Complaint Management System",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "CivicTrack — Smart Civic Complaint Management System",
+    template: "%s | CivicTrack",
+  },
   description:
     "Empowering citizens and municipal departments with transparent, real-time civic issue reporting and resolution tracking.",
+  applicationName: "CivicTrack",
+  openGraph: {
+    type: "website",
+    siteName: "CivicTrack",
+    title: "CivicTrack — Smart Civic Complaint Management System",
+    description:
+      "Empowering citizens and municipal departments with transparent, real-time civic issue reporting and resolution tracking.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CivicTrack — Smart Civic Complaint Management System",
+    description:
+      "Empowering citizens and municipal departments with transparent, real-time civic issue reporting and resolution tracking.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  icons: {
+    icon: "/icon",
+  },
 };
 
 export default function RootLayout({

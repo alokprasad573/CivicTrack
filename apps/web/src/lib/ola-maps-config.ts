@@ -15,10 +15,11 @@ export const DEFAULT_MAP_CENTER: [number, number] = [77.5946, 12.9716];
 export const DEFAULT_MAP_ZOOM = 13;
 
 export function getClientOlaMapsApiKey(): string {
-  return (
-    process.env.NEXT_PUBLIC_OLA_MAPS_API_KEY ||
-    "X4oHN8nq0SpKbJPfuF0dbHOeNlpobHkKzQYtS6Gi"
-  );
+  const key = process.env.NEXT_PUBLIC_OLA_MAPS_API_KEY;
+  if (!key) {
+    throw new Error("NEXT_PUBLIC_OLA_MAPS_API_KEY is not configured");
+  }
+  return key;
 }
 
 /**
