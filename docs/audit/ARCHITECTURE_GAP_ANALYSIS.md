@@ -1,0 +1,37 @@
+# CivicTrack Phase 0 — Architecture Gap & Contradiction Analysis
+
+## 1. Documentation-vs-Code Contradictions
+
+### 1.1 REST API & Contract Contradictions (`docs/API_DOCUMENTATION.md`, `apps/server/src/docs/openapi.ts`)
+| Topic | Documented Specification | Verified Code Reality |
+| :--- | :--- | :--- |
+| Workflow transition HTTP methods | `PATCH /complaints/:id/review\|verify\|start-work\|resolve\|close\|reject` (`API_DOCUMENTATION.md:144-150`) | All 7 workflow endpoints mount `POST` (`complaint.routes.ts:33-41` and frontend pages) |
+| Workflow role matrix | `/review` & `/reject` (`ADMIN, OFFICER`); `/close` (`CITIZEN, ADMIN`); `POST /complaints` (`CITIZEN, ADMIN`) (`API_DOCUMENTATION.md:48, 144-150`) | `/review`, `/reject`, `/close` are `ADMIN` only; `/start-work` & `/resolve` allow `OFFICER` + `ADMIN`; `POST /complaints` allows any authenticated role (`complaint.routes.ts:15-41`, `complaint-workflow.service.ts`) |
+| Complaint creation schema | `openapi.ts:182-194`: `title.maxLength: 120`, `description.minLength: 10`, `evidenceObjectKeys: string[]` | `CreateComplaintSchema` (`packages/contracts/src/complaints.ts:33-41`): `title.max(150)`, `description.min(20)`, `evidence: EvidenceItem[]` |
+| Nearby query defaults | `lng`, `lat` marked required (`API_DOCUMENTATION.md:109-110`) | `NearbyQuerySchema` (`complaint.controller.ts:51-52`) defaults missing coordinates to `[77.5946, 12.9716]` |
+| Upload intent payload & expiry | `{contentType, size, filename}` -> `{uploadUrl, objectKey, expiresAt}` (`API_DOCUMENTATION.md:173-189`); `PDF` allowed (`README.md:66`, `ARCHITECTURE.md:211`); `view-url` TTL `900s` (`API_DOCUMENTATION.md:201`) | Requires `{files: [...]}` -> `{uploads: [...]}` (`contracts/storage.ts:42-66`); MIME types restricted to JPEG/PNG/WebP (`storage.ts:8-12`, no PDF); `view-url` TTL is `3600s` (`config/s3.ts:6`); `/upload`, `/upload-intents`, `/cleanup` undocumented |
+| Citizen evidence upload architecture | `ARCHITECTURE.md` / `TECH_STACK.md` ADR-05 specify direct S3 pre-signed PUT upload-intent flow | `app/citizen/report/page.tsx:179-182` submits multipart `FormData` directly to `POST /api/v1/complaints` (which routes through `uploadEvidenceMiddleware` + `S3Service.processAndUploadEvidenceFiles`) |
+| Staff auth endpoints & cookies | `/api/v1/staff/auth/login` (`ARCHITECTURE.md:122`); `GET /officer/auth/invitation/verify` (`API_DOCUMENTATION.md:246`); cookies `access_token` / `refresh_token` (`SameSite=Strict`, `TECH_STACK.md:22`) or `civictrack_staff_access` (`app.ts:71`, `openapi.ts:37`) | Mounted at `/admin/auth/*`, `/officer/auth/*`, `/staff/invitations/verify|accept`; cookies `civictrack_{admin\|officer}_{token\|refresh}` use **`SameSite=Lax`** (`staff-auth.controller.ts:24, 39-40`) |
+| Maps directions | `GET /api/v1/maps/directions?originLat=...` (`API_DOCUMENTATION.md:283`) | `POST /api/v1/maps/directions` with JSON `{origin, destination, mode?}` (`maps.routes.ts:8`) |
+| Notifications read-all | `PATCH /api/v1/notifications/read-all` (`API_DOCUMENTATION.md:322`) | `POST /api/v1/notifications/read-all` (`notification.routes.ts:12`) |
+| Duplicate detection | `POST /api/v1/duplicates/check` (`50m` auto-dedup on creation; `API_DOCUMENTATION.md:287`, `ARCHITECTURE.md:193`) | `GET /api/v1/duplicates/:id/candidates` (`250m`, open to `ADMIN` + `OFFICER`) & `POST /api/v1/duplicates/:id/link`; `create` performs no deduplication |
+| Analytics & SLA endpoints | `GET /analytics/sla-standing`, `GET /sla/config`, `GET /sla/escalations` (`API_DOCUMENTATION.md:305-314`) | Do not exist; mounted routes are `GET /analytics/summary`, `POST /sla/scan`, `GET /sla/overdue` |
+| Rate limits | `100 req/15m` standard, `5 req/15m` auth (`API_DOCUMENTATION.md:40`) | `300 req/15m` general, `60 req/15m` auth/webhook, `50 req/15m` storage (`rate-limit.middleware.ts:28-56`) |
+| State machine & Socket rooms | `SUBMITTED -> REVIEWED`, `IN_PROGRESS -> ASSIGNED`, `RESOLVED -> IN_PROGRESS`; room `department:{id}` (`ARCHITECTURE.md:138, 156-176`, `FEATURES.md:20`) | Actual states are `UNDER_REVIEW` & `VERIFIED`; `RESOLVED -> IN_PROGRESS` & `IN_PROGRESS -> ASSIGNED` disallowed (`contracts/workflow.ts:13-22`); Socket.IO room is `dept:{id}` (`socket.ts:91`) |
+
+### 1.2 Database & Infrastructure Contradictions (`docs/DATABASE_STUCTURE.md`, `docker-compose.yml`, `QUICKSTART.md`)
+- **Env variable mismatches:** `docker-compose.yml:29` and `QUICKSTART.md:50, 55-56, 67` use `DATABASE_URL`, `AWS_S3_BUCKET`, `STAFF_JWT_ACCESS_EXPIRES_IN`; `apps/server/src/config/env.ts` reads **`ATLAS_URI`**, **`AWS_S3_BUCKET_NAME`**, and **`STAFF_JWT_ACCESS_EXPIRY`**!
+- **Web Docker image bloat:** `apps/web/Dockerfile:19-46` installs all `devDependencies` (`npm ci --include=dev`) and copies the entire `node_modules` directory into the runtime stage without `npm prune --omit=dev`.
+- **Index mismatches (`DATABASE_STUCTURE.md`):** `UploadIntentModel` (`ttl: 15m` in `s3.ts`, no TTL index in `upload-intent.model.ts`); `StaffInvitationModel` (`status` enum, no TTL index); `StaffSessionModel` (`refreshTokenHash` non-unique); `UserModel` (`{role:1,isActive:1}` & `{departmentId:1,role:1}`); `SlaEscalationModel` (no `{isResolved:1,delayHours:-1}`).
+- **Production `autoIndex: false`:** `config/database.ts:110-117` and `scripts/sync-indexes.ts` only build indexes on 3–4 of 11 models, leaving `NotificationModel`, `UploadIntentModel`, `SlaEscalationModel`, `StaffInvitationModel`, `ComplaintStatusHistoryModel`, `CounterModel` without explicit index sync in production.
+- **Socket URL configuration:** `QUICKSTART.md:83` documents `NEXT_PUBLIC_SOCKET_URL`, which `apps/web/src/hooks/use-socket.ts:8-9` never reads.
+
+---
+
+## 2. Structural & Workflow Gaps Requiring Guardrails
+
+1. **Creator-Admin Multi-Tenancy Boundary Is Inconsistent:** Department reads/updates/deletes and `GET /api/v1/users` check `createdByAdminId`, whereas complaint workflow (`review`, `verify`, `reject`, `assign`, `close`), invitations (`list`/`revoke`), SLA scans/overdue, duplicate detection, S3 view authorization, and Socket.IO `role:admin`/`dept:*`/`complaint:*` broadcast/join allow cross-admin access or leak. Guardrail needed to preserve citizen complaint auto-routing (`DepartmentService.findByCategory` or creator-scoped staff views) without breaking existing tests/contracts!
+2. **Offline Resilience vs Fail-Closed Security:** Tests rely on `ATLAS_URI=""` offline mode (`NODE_ENV="test"`), whereas `socket.ts:106` currently fails OPEN when DB `readyState !== 1`. Guardrails must forbid fail-open authorization even in offline fallback.
+3. **Middleware Deprecation & Auth Splitting:** `apps/web/src/middleware.ts` protects `/admin` and `/officer` via cookie *presence* without signature verification, leaves `/admin` & `/officer` staff off `/notifications`, whitelists nonexistent `/how-it-works`, and triggers Next.js 16 deprecation warning (`middleware` -> `proxy`).
+4. **Staff Token Refresh Absence:** 15-minute HttpOnly access tokens expire silently in browser sessions because zero frontend code calls `/api/v1/{admin|officer}/auth/refresh` and `StaffAuthContext` fails silently without redirecting.
+5. **Unprotected Schema / API Contract Checklists:** All Phase 3–8 fixes MUST respect `.agents/AGENTS.md`: no Mongoose document-shape breaking changes, no REST path/method/payload/response breaking changes, no Socket event name/payload breaking changes, no new production dependencies.
