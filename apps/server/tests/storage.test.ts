@@ -256,15 +256,33 @@ async function runStorageTests(): Promise<void> {
   }
   console.log("   -> Citizen can view their own uploaded evidence (1-hour short-lived GET URL)");
 
-  // 7b. Admin viewing evidence must succeed
-  const adminViewRes = await StorageService.getViewUrl({
-    objectKey: targetKey,
+  // 7b. Admin viewing unattached citizen evidence fails closed with 403 Forbidden (creator isolation)
+  let unattachedAdminBlocked = false;
+  try {
+    await StorageService.getViewUrl({
+      objectKey: targetKey,
+      user: adminUser,
+    });
+  } catch (err: any) {
+    if (err.statusCode === 403) {
+      unattachedAdminBlocked = true;
+    }
+  }
+  if (!unattachedAdminBlocked) {
+    throw new Error("Failed: Admin without complaint/department association was NOT blocked from unattached citizen evidence");
+  }
+  console.log("   -> Admin correctly blocked with 403 FORBIDDEN on unattached citizen evidence");
+
+  // 7b-2. Admin viewing their own uploaded evidence key succeeds
+  const adminOwnKey = `evidence/${adminUser.id}/supervisory_check.jpg`;
+  const adminOwnViewRes = await StorageService.getViewUrl({
+    objectKey: adminOwnKey,
     user: adminUser,
   });
-  if (!adminViewRes.viewUrl.includes("X-Amz-Signature")) {
-    throw new Error("Failed: Admin view URL generation failed");
+  if (!adminOwnViewRes.viewUrl.includes("X-Amz-Signature")) {
+    throw new Error("Failed: Admin own-evidence view URL generation failed");
   }
-  console.log("   -> Admin can view evidence for supervisory oversight");
+  console.log("   -> Admin can view their own uploaded evidence key");
 
   // 7c. Unrelated citizen viewing evidence must be rejected with 403 Forbidden
   let intruderBlocked = false;
@@ -294,7 +312,7 @@ async function runStorageTests(): Promise<void> {
       dto: {
         title: "Pothole on Main Road",
         description: "Large deep pothole causing vehicle damage and traffic congestion.",
-        category: ComplaintCategory.ROADS,
+        category: ComplaintCategory.ROADS_POTHOLES,
         location: { type: "Point", coordinates: [77.5946, 12.9716] },
         address: "Main Ring Road, Bangalore",
         evidence: [
@@ -323,7 +341,7 @@ async function runStorageTests(): Promise<void> {
     dto: {
       title: "Pothole on Main Road",
       description: "Large deep pothole causing vehicle damage and traffic congestion.",
-      category: ComplaintCategory.ROADS,
+      category: ComplaintCategory.ROADS_POTHOLES,
       location: { type: "Point", coordinates: [77.5946, 12.9716] },
       address: "Main Ring Road, Bangalore",
       evidence: [

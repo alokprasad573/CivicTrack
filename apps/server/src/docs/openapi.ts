@@ -107,7 +107,7 @@ export const openApiSpec = {
           "DRAINAGE_SEWAGE",
           "STREETLIGHTS",
           "ELECTRICITY",
-          "OTHER",
+          "GENERAL",
         ],
       },
       ComplaintPriority: {

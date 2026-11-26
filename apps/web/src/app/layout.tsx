@@ -4,7 +4,7 @@ import { ToastProvider } from "../components/ui/toast-context";
 import "./globals.css";
 
 const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://civictrack.example.com";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://civic-track-beta-three.vercel.app/";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     follow: true,
   },
   icons: {
-    icon: "/icon",
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
   },
 };
 

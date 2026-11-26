@@ -32,7 +32,7 @@ export const CATEGORY_COLORS: Record<ComplaintCategory, string> = {
   [ComplaintCategory.DRAINAGE_SEWAGE]: "#64748b",     // Slate / Stormwater & Sewage
   [ComplaintCategory.STREETLIGHTS]: "#eab308",        // Yellow / Streetlighting
   [ComplaintCategory.ELECTRICITY]: "#8b5cf6",         // Purple / Power outages
-  [ComplaintCategory.GENERAL]: "#94a3b8",               // Neutral Gray / General Inquiries
+  [ComplaintCategory.GENERAL]: "#94a3b8",             // Neutral Gray / General Inquiries
 };
 
 /**

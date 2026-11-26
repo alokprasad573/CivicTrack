@@ -591,7 +591,7 @@ export default function OfficerComplaintDetailPage({
                       referenceNumber: complaint.referenceNumber || String(complaintId).slice(-6).toUpperCase(),
                       title: complaint.title || "Incident Location",
                       description: complaint.description,
-                      category: complaint.category || ComplaintCategory.OTHER,
+                      category: complaint.category || ComplaintCategory.GENERAL,
                       status: complaint.status || ComplaintStatus.SUBMITTED,
                       priority: complaint.priority,
                       location: complaint.location,

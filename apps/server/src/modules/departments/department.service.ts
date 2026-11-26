@@ -171,7 +171,7 @@ export class DepartmentService {
       {
         name: "General Municipal Affairs",
         code: "GENERAL",
-        categories: [ComplaintCategory.OTHER],
+        categories: [ComplaintCategory.GENERAL],
       },
     ];
 

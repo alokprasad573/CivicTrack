@@ -78,6 +78,65 @@ function createOlaStyleIconFallback(imageId: string): ImageData {
 
 // Benign Ola Maps SDK warnings are no longer suppressed via console monkey-patching.
 
+function isIgnorableMapError(eventOrError: any): boolean {
+  const err = eventOrError?.error || eventOrError;
+  const msg = err?.message || String(err || "");
+  return (
+    err?.name === "AbortError" ||
+    msg.includes("AbortError") ||
+    msg.includes("signal is aborted") ||
+    msg.includes("aborted without reason") ||
+    msg.includes("The operation was aborted") ||
+    msg.includes('Source layer "3d_model"') ||
+    msg.includes("3d_model_data")
+  );
+}
+
+/**
+ * Registers error handlers on a MapLibre/Ola instance and its style/sources
+ * before removal or style replacement so aborted in-flight fetches do not fall
+ * through detached Evented parents to console.error after cleanup.
+ */
+export function attachTeardownErrorHandlers(instance: any): void {
+  if (!instance) return;
+  const ignoreError = (e: any) => {
+    if (isIgnorableMapError(e)) return;
+  };
+
+  try {
+    instance.on?.("error", ignoreError);
+    const style = instance.style;
+    if (!style) return;
+
+    style.on?.("error", ignoreError);
+    style.imageManager?.on?.("error", ignoreError);
+
+    const managers = [
+      ...Object.values(style.tileManagers || {}),
+      ...Object.values(style.sourceCaches || {}),
+    ] as any[];
+
+    for (const manager of managers) {
+      manager?.on?.("error", ignoreError);
+      manager?._source?.on?.("error", ignoreError);
+      const src = typeof manager?.getSource === "function" ? manager.getSource() : null;
+      src?.on?.("error", ignoreError);
+    }
+  } catch {
+    // Ignore errors from partially initialized SDK internals
+  }
+}
+
+export function disposeMapInstance(instance: any): void {
+  if (!instance) return;
+  attachTeardownErrorHandlers(instance);
+  try {
+    instance.remove?.();
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
 export interface UseOlaMapOptions {
   containerId: string;
   initialCenter?: Coordinates;
@@ -107,6 +166,8 @@ export function useOlaMap(options: UseOlaMapOptions) {
   const currentZoomRef = useRef<number>(initialZoom);
   const isInitializingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   // Initialize Ola Map
   const initializeMap = useCallback(
@@ -137,11 +198,7 @@ export function useOlaMap(options: UseOlaMapOptions) {
 
         // Clean up any existing map instance safely
         if (mapInstanceRef.current) {
-          try {
-            mapInstanceRef.current.remove();
-          } catch {
-            // ignore cleanup errors on old instance
-          }
+          disposeMapInstance(mapInstanceRef.current);
           mapInstanceRef.current = null;
         }
 
@@ -196,28 +253,17 @@ export function useOlaMap(options: UseOlaMapOptions) {
 
         // If component unmounted while initializing, dispose instance immediately
         if (!isMountedRef.current) {
-          try {
-            mapInstance.remove();
-          } catch {
-            // ignore cleanup errors
-          }
+          disposeMapInstance(mapInstance);
           return;
         }
 
         // 1. Suppress unhandled MapLibre error logging for non-existent 3D model vector layers or aborted requests
         mapInstance.on("error", (e: any) => {
-          const err = e?.error || e;
-          const msg = err?.message || String(err || "");
-          if (
-            err?.name === "AbortError" ||
-            msg.includes("signal is aborted") ||
-            msg.includes("aborted without reason") ||
-            msg.includes("The operation was aborted") ||
-            msg.includes('Source layer "3d_model"') ||
-            msg.includes("3d_model_data")
-          ) {
+          if (isIgnorableMapError(e)) {
             return;
           }
+          const err = e?.error || e;
+          const msg = err?.message || String(err || "");
           console.warn("Ola Maps map event:", msg);
         });
 
@@ -252,14 +298,12 @@ export function useOlaMap(options: UseOlaMapOptions) {
           }
         });
 
-        // Click handler for location picking
-        if (onMapClick) {
-          mapInstance.on("click", (e: any) => {
-            if (e.lngLat) {
-              onMapClick([e.lngLat.lng, e.lngLat.lat]);
-            }
-          });
-        }
+        // Click handler for location picking (via ref so inline callbacks never recreate the map)
+        mapInstance.on("click", (e: any) => {
+          if (e.lngLat && onMapClickRef.current) {
+            onMapClickRef.current([e.lngLat.lng, e.lngLat.lat]);
+          }
+        });
 
         mapInstanceRef.current = mapInstance;
         setMap(mapInstance);
@@ -273,7 +317,7 @@ export function useOlaMap(options: UseOlaMapOptions) {
         isInitializingRef.current = false;
       }
     },
-    [containerId, onMapClick]
+    [containerId]
   );
 
   // Switch map modes smoothly
@@ -295,6 +339,7 @@ export function useOlaMap(options: UseOlaMapOptions) {
             newMode === "satellite"
               ? OLA_MAPS_ENDPOINTS.SATELLITE_STYLE
               : OLA_MAPS_ENDPOINTS.DEFAULT_LIGHT_STYLE;
+          attachTeardownErrorHandlers(mapInstance);
           mapInstance.setStyle(styleUrl);
           mapInstance.setPitch(0);
         } catch {
@@ -348,11 +393,7 @@ export function useOlaMap(options: UseOlaMapOptions) {
       if (mapInstanceRef.current) {
         const instance = mapInstanceRef.current;
         mapInstanceRef.current = null;
-        try {
-          instance.remove();
-        } catch {
-          // ignore cleanup errors
-        }
+        disposeMapInstance(instance);
       }
     };
   }, [initializeMap, initialMode]);

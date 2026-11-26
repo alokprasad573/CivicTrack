@@ -77,8 +77,8 @@ const CATEGORY_DEFINITIONS = [
     description: "Exposed live wires, sparks, hazardous electrical equipment",
   },
   {
-    category: ComplaintCategory.OTHER,
-    label: "Other Civic Inquiries",
+    category: ComplaintCategory.GENERAL,
+    label: "General Civic Inquiries",
     targetDays: "2 days",
     description: "General public infrastructure issues and civic reports",
   },

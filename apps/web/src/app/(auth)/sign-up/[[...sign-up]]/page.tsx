@@ -15,7 +15,7 @@ export default function SignUpPage() {
             <span>Back to Home</span>
           </Link>
           <Link
-            href="/map"
+            href="/map?from=%2Fsign-up"
             className="inline-flex min-h-[44px] items-center text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors rounded-lg"
           >
             Explore City Map &rarr;

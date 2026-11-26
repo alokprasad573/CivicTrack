@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   ComplaintCategory,
@@ -14,6 +14,7 @@ import { LocationPicker } from "../../components/maps/location-picker";
 import { MapComplaintItem } from "../../hooks/use-complaint-markers";
 import { useGeolocation } from "../../hooks/use-geolocation";
 import { CATEGORY_COLORS, DEFAULT_MAP_CENTER } from "../../lib/ola-maps-config";
+import { getMapBackLabel, getSafeInternalPath } from "../../lib/map-navigation";
 import { StatusBadge } from "../../components/ui/status-badge";
 import {
   MapPin,
@@ -75,7 +76,7 @@ const CATEGORY_FILTERS = [
   { label: "Drainage & Sewage", value: ComplaintCategory.DRAINAGE_SEWAGE },
   { label: "Streetlights", value: ComplaintCategory.STREETLIGHTS },
   { label: "Electricity Grid", value: ComplaintCategory.ELECTRICITY },
-  { label: "Other", value: ComplaintCategory.OTHER },
+  { label: "General", value: ComplaintCategory.GENERAL },
 ];
 
 /**
@@ -108,9 +109,63 @@ function formatDistance(distKm: number): string {
 }
 
 function MapsExplorerContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const queryLng = searchParams.get("lng");
   const queryLat = searchParams.get("lat");
+  const fromParam = useMemo(
+    () => getSafeInternalPath(searchParams.get("from")),
+    [searchParams]
+  );
+
+  const [referrerPath, setReferrerPath] = useState<string | null>(null);
+  const [canGoBack, setCanGoBack] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let sameOriginPath: string | null = null;
+    let isExternalReferrer = false;
+
+    if (document.referrer) {
+      try {
+        const refUrl = new URL(document.referrer);
+        if (refUrl.origin === window.location.origin) {
+          sameOriginPath = getSafeInternalPath(`${refUrl.pathname}${refUrl.search}${refUrl.hash}`);
+        } else {
+          isExternalReferrer = true;
+        }
+      } catch {
+        sameOriginPath = null;
+      }
+    }
+
+    setReferrerPath(sameOriginPath);
+    setCanGoBack(window.history.length > 1 && (!isExternalReferrer || Boolean(fromParam)));
+  }, [fromParam]);
+
+  const backTarget = fromParam || referrerPath;
+  const backHref = backTarget || "/";
+  const backLabel = getMapBackLabel(backTarget, canGoBack);
+
+  const handleBackClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (
+        fromParam ||
+        !canGoBack ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey ||
+        e.button !== 0
+      ) {
+        return;
+      }
+      e.preventDefault();
+      router.back();
+    },
+    [fromParam, canGoBack, router]
+  );
 
   const [activeTab, setActiveTab] = useState<"city" | "picker">("city");
 
@@ -316,11 +371,12 @@ function MapsExplorerContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4">
             <Link
-              href="/"
+              href={backHref}
+              onClick={handleBackClick}
               className="inline-flex items-center gap-1.5 min-h-[44px] px-2 -ml-2 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Home</span>
+              <span>{backLabel}</span>
             </Link>
             <div className="h-4 w-px bg-slate-200" aria-hidden="true" />
             <div className="flex items-center gap-2">
@@ -517,7 +573,7 @@ function MapsExplorerContent() {
                 </span>
                 {CATEGORY_FILTERS.map((cat) => (
                   <button
-                    key={cat.value}
+                    key={cat.value || "all"}
                     type="button"
                     onClick={() => setCategoryFilter(cat.value)}
                     aria-pressed={categoryFilter === cat.value}

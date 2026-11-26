@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { NotificationBell } from "../notifications/notification-bell";
 import { StaffAuthProvider, useStaffAuth } from "../../context/staff-auth-context";
+import { buildMapReturnHref } from "../../lib/map-navigation";
 
 interface NavItem {
   id: string;
@@ -112,7 +113,7 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
             return (
               <Link
                 key={item.id}
-                href={item.href}
+                href={buildMapReturnHref(item.href, pathname)}
                 title={sidebarCollapsed ? item.label : undefined}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors duration-150 min-h-[44px] ${
@@ -220,7 +221,7 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
                 return (
                   <Link
                     key={item.id}
-                    href={item.href}
+                    href={buildMapReturnHref(item.href, pathname)}
                     onClick={() => setMobileMenuOpen(false)}
                     aria-current={isActive ? "page" : undefined}
                     className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-colors min-h-[44px] ${
@@ -277,7 +278,7 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
             return (
               <Link
                 key={item.id}
-                href={item.href}
+                href={buildMapReturnHref(item.href, pathname)}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] transition-colors min-h-[48px] ${
                   isActive

@@ -359,7 +359,7 @@ async function runAdminScopedDataTests(): Promise<void> {
     const legacyDept = await DepartmentModel.create({
       name: `Legacy Department ${testSuffix}`,
       code: `LEG${testSuffix.slice(-4)}`,
-      categories: [ComplaintCategory.OTHER],
+      categories: [ComplaintCategory.GENERAL],
       isActive: true,
       // createdByAdminId is intentionally undefined / omitted
     });
