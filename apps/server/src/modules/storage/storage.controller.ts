@@ -79,6 +79,7 @@ export class StorageController {
 
       const result = await StorageService.createUploadIntents({
         userId: req.user.id,
+        userRole: req.user.role,
         dto,
       });
 
@@ -135,9 +136,9 @@ export class StorageController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const olderThanHours = req.query.olderThanHours
-        ? Number(req.query.olderThanHours)
-        : 24;
+      const raw = req.query.olderThanHours;
+      const parsed = raw !== undefined ? Number(raw) : 24;
+      const olderThanHours = Number.isFinite(parsed) && parsed > 0 ? parsed : 24;
 
       const result = await StorageService.cleanupOrphanedUploads({
         olderThanHours,

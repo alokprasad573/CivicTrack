@@ -52,6 +52,15 @@ export class UserService {
       $or: [{ clerkUserId: dto.clerkUserId }, { email }],
     });
 
+    if (existing && (existing.role === UserRole.ADMIN || existing.role === UserRole.OFFICER)) {
+      logger.warn("Blocked Clerk sync into staff account", {
+        clerkUserId: dto.clerkUserId,
+        email,
+        role: existing.role,
+      });
+      throw new ForbiddenError("Cannot synchronize Clerk identity into a staff account.");
+    }
+
     if (existing) {
       let modified = false;
       if (!existing.clerkUserId || existing.clerkUserId !== dto.clerkUserId) {

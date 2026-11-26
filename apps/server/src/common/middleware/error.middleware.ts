@@ -96,6 +96,21 @@ export function errorMiddleware(
     return;
   }
 
+  // Multer upload errors
+  if ((err as any)?.name === "MulterError" || (err as any)?.code === "LIMIT_FILE_SIZE") {
+    const response: ApiErrorResponse = {
+      success: false,
+      error: {
+        code: "UPLOAD_ERROR",
+        message: (err as any)?.message || "File upload failed",
+      },
+      requestId,
+    };
+    logger.warn("Multer upload error", { requestId, path: req.path, code: (err as any)?.code });
+    res.status(400).json(response);
+    return;
+  }
+
   // Unhandled / system errors
   logger.error("Unhandled error encountered", {
     requestId,

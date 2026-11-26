@@ -116,33 +116,19 @@ export class StaffAuthService {
     PasswordSchema.parse(params.password);
 
     const existingUser = await UserModel.findOne({ email: normalizedEmail });
-    if (
-      existingUser &&
-      existingUser.isActive &&
-      (existingUser.role === UserRole.ADMIN || existingUser.role === UserRole.OFFICER)
-    ) {
+    if (existingUser) {
       throw new ConflictError("An account with this email address already exists.");
     }
 
     const passwordHash = await bcrypt.hash(params.password, 12);
 
-    let user: any;
-    if (existingUser) {
-      existingUser.name = trimmedName;
-      existingUser.passwordHash = passwordHash;
-      existingUser.role = UserRole.ADMIN;
-      existingUser.isActive = true;
-      await existingUser.save();
-      user = existingUser;
-    } else {
-      user = await UserModel.create({
-        email: normalizedEmail,
-        name: trimmedName,
-        passwordHash,
-        role: UserRole.ADMIN,
-        isActive: true,
-      });
-    }
+    const user = await UserModel.create({
+      email: normalizedEmail,
+      name: trimmedName,
+      passwordHash,
+      role: UserRole.ADMIN,
+      isActive: true,
+    });
 
     logger.info("Administrator account registered directly", {
       userId: user._id.toString(),
@@ -179,16 +165,8 @@ export class StaffAuthService {
 
     const staffRole = user.role as UserRole.ADMIN | UserRole.OFFICER;
 
-    const session = await StaffSessionModel.create({
-      userId: user._id,
-      role: staffRole,
-      refreshTokenHash: "pending",
-      userAgent,
-      ipAddress,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-    });
-
-    const sessionId = session._id.toString();
+    const sessionIdObj = new Types.ObjectId();
+    const sessionId = sessionIdObj.toString();
 
     const accessToken = JwtService.signAccessToken({
       userId: user._id.toString(),
@@ -205,8 +183,15 @@ export class StaffAuthService {
       role: staffRole,
     });
 
-    session.refreshTokenHash = JwtService.hashToken(refreshToken);
-    await session.save();
+    await StaffSessionModel.create({
+      _id: sessionIdObj,
+      userId: user._id,
+      role: staffRole,
+      refreshTokenHash: JwtService.hashToken(refreshToken),
+      userAgent,
+      ipAddress,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    });
 
     logger.info("Staff member session established successfully", {
       userId: user._id.toString(),
@@ -602,17 +587,9 @@ export class StaffAuthService {
       throw new ForbiddenError("User account is inactive or role has changed.");
     }
 
-    // Create new rotated session
-    const newSession = await StaffSessionModel.create({
-      userId: user._id,
-      role: user.role,
-      refreshTokenHash: "pending",
-      userAgent: params.userAgent,
-      ipAddress: params.ipAddress,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    });
-
-    const newSessionId = newSession._id.toString();
+    // Create new rotated session (single write)
+    const newSessionIdObj = new Types.ObjectId();
+    const newSessionId = newSessionIdObj.toString();
 
     const newAccessToken = JwtService.signAccessToken({
       userId: user._id.toString(),
@@ -629,8 +606,15 @@ export class StaffAuthService {
       role: user.role,
     });
 
-    newSession.refreshTokenHash = JwtService.hashToken(newRefreshToken);
-    await newSession.save();
+    await StaffSessionModel.create({
+      _id: newSessionIdObj,
+      userId: user._id,
+      role: user.role,
+      refreshTokenHash: JwtService.hashToken(newRefreshToken),
+      userAgent: params.userAgent,
+      ipAddress: params.ipAddress,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
 
     return {
       user: {

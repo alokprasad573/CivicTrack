@@ -122,7 +122,7 @@ export class ComplaintQueryService {
     assignedOfficerId?: string;
     assignedToMe?: boolean;
     search?: string;
-  }): Promise<{ complaints: IComplaintDocument[]; total: number; page: number; limit: number; totalPages: number }> {
+  }): Promise<{ complaints: any[]; total: number; page: number; limit: number; totalPages: number }> {
     const page = Math.max(1, options.page || 1);
     const limit = Math.min(100, Math.max(1, options.limit || 10));
     const skip = (page - 1) * limit;
@@ -156,28 +156,27 @@ export class ComplaintQueryService {
       }
     } else if (options.user.role === UserRole.ADMIN) {
       const { DepartmentModel } = await import("../departments/department.model.js");
-      const adminDepts = await DepartmentModel.find({
-        createdByAdminId: new Types.ObjectId(options.user.id),
-        isActive: true,
-      }).select("_id");
-      const adminDeptIds = adminDepts.map((d) => d._id);
+      const allDepts = await DepartmentModel.find({}).select("_id createdByAdminId isActive");
+      const adminDeptIds = allDepts
+        .filter((d: any) => d.createdByAdminId && d.createdByAdminId.toString() === options.user.id && d.isActive)
+        .map((d: any) => d._id);
+      const otherDeptIds = allDepts
+        .filter((d: any) => d.createdByAdminId && d.createdByAdminId.toString() !== options.user.id)
+        .map((d: any) => d._id);
 
       if (options.departmentId) {
         if (!Types.ObjectId.isValid(options.departmentId)) {
           throw new ValidationError("Invalid department ID format");
         }
         const requestedId = new Types.ObjectId(options.departmentId);
-        if (!adminDeptIds.some((id) => id.equals(requestedId))) {
+        if (!adminDeptIds.some((id: any) => id.equals(requestedId))) {
           throw new ForbiddenError("You do not have permission to view complaints for this department.");
         }
         query.departmentId = requestedId;
       } else {
         // Exclude complaints assigned to other admins' departments
-        const otherDepts = await DepartmentModel.find({
-          createdByAdminId: { $ne: new Types.ObjectId(options.user.id) },
-        }).select("_id");
-        if (otherDepts.length > 0) {
-          query.departmentId = { $nin: otherDepts.map((d) => d._id) };
+        if (otherDeptIds.length > 0) {
+          query.departmentId = { $nin: otherDeptIds };
         }
       }
       if (options.assignedOfficerId) {
@@ -217,7 +216,8 @@ export class ComplaintQueryService {
         .limit(limit)
         .populate("citizenId", "name email")
         .populate("departmentId", "name code")
-        .populate("assignedOfficerId", "name email"),
+        .populate("assignedOfficerId", "name email")
+        .lean(),
       ComplaintModel.countDocuments(query),
     ]);
 

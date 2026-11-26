@@ -54,7 +54,9 @@ export class SlaService {
       dueAt: { $lt: now, $ne: null },
     })
       .populate("departmentId", "name")
-      .populate("assignedOfficerId", "name email");
+      .populate("assignedOfficerId", "name email")
+      .limit(500)
+      .lean();
 
     let escalatedCount = 0;
 
@@ -96,17 +98,19 @@ export class SlaService {
 
         escalatedCount++;
 
-        // Notify admins regarding SLA breach
-        for (const admin of admins) {
-          await NotificationService.createAndEmit({
-            recipientId: admin._id.toString(),
-            type: NotificationType.SLA_BREACH,
-            title: `SLA Breach: ${complaint.referenceNumber}`,
-            message: `Complaint "${complaint.title}" is ${delayHours}h overdue. Priority: ${complaint.priority}. Immediate supervisor review required.`,
-            resourceType: "COMPLAINT",
-            resourceId: complaint._id.toString(),
-          });
-        }
+        // Notify admins regarding SLA breach (parallelized)
+        await Promise.all(
+          admins.map((admin) =>
+            NotificationService.createAndEmit({
+              recipientId: admin._id.toString(),
+              type: NotificationType.SLA_BREACH,
+              title: `SLA Breach: ${complaint.referenceNumber}`,
+              message: `Complaint "${complaint.title}" is ${delayHours}h overdue. Priority: ${complaint.priority}. Immediate supervisor review required.`,
+              resourceType: "COMPLAINT",
+              resourceId: complaint._id.toString(),
+            })
+          )
+        );
 
         // Also notify assigned officer if assigned
         if (complaint.assignedOfficerId) {

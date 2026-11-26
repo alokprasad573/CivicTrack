@@ -54,7 +54,7 @@ export function createApp(): Express {
   // CORS configuration
   app.use(
     cors({
-      origin: ["http://localhost:3000", "http://127.0.0.1/3000",env.CLIENT_URL],
+      origin: ["http://localhost:3000", "http://127.0.0.1:3000", env.CLIENT_URL],
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID", "svix-id", "svix-timestamp", "svix-signature"],
@@ -68,7 +68,10 @@ export function createApp(): Express {
   app.use((req: Request, res: Response, next) => {
     const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
     const hasStaffCookie = !!(
-      req.cookies?.civictrack_staff_access || req.cookies?.civictrack_staff_refresh
+      req.cookies?.civictrack_admin_token ||
+       req.cookies?.civictrack_admin_refresh ||
+       req.cookies?.civictrack_officer_token ||
+       req.cookies?.civictrack_officer_refresh
     );
     const isWebhook = req.path.startsWith("/api/v1/identity/clerk-webhook") || req.path.startsWith("/api/v1/webhooks");
 

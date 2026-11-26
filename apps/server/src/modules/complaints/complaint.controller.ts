@@ -191,56 +191,20 @@ export class ComplaintController {
         assignedToMe,
       });
 
-      // Populate pre-signed view URLs for evidence items in complaints list
-      const populatedComplaints = await Promise.all(
-        result.complaints.map(async (c: any) => {
-          const compObj = c.toObject ? c.toObject() : { ...c };
-          if (compObj.evidence && compObj.evidence.length > 0) {
-            compObj.evidence = await Promise.all(
-              compObj.evidence.map(async (item: any) => {
-                const key = item.objectKey || item.key;
-                let url = item.url;
-                if (key) {
-                  try {
-                    url = await S3Service.generatePresignedViewUrl(key);
-                  } catch {
-                    url = item.url || "";
-                  }
-                }
-                return {
-                  ...item,
-                  key,
-                  objectKey: key,
-                  url,
-                };
-              })
-            );
-          }
-
-          if (compObj.resolutionEvidence && compObj.resolutionEvidence.length > 0) {
-            compObj.resolutionEvidence = await Promise.all(
-              compObj.resolutionEvidence.map(async (item: any) => {
-                const key = item.objectKey || item.key;
-                let url = item.url;
-                if (key) {
-                  try {
-                    url = await S3Service.generatePresignedViewUrl(key);
-                  } catch {
-                    url = item.url || "";
-                  }
-                }
-                return {
-                  ...item,
-                  key,
-                  objectKey: key,
-                  url,
-                };
-              })
-            );
-          }
-          return compObj;
-        })
-      );
+      // List responses return evidence object-key metadata only (no expensive S3 presigning).
+      // Fresh signed URLs are generated on demand via getById / view-url.
+      const populatedComplaints = result.complaints.map((c: any) => {
+        const compObj = c.toObject ? c.toObject() : { ...c };
+        const normalize = (items: any[]) =>
+          (items || []).map((item: any) => {
+            const key = item.objectKey || item.key;
+            const { url: _url, ...rest } = item || {};
+            return { ...rest, key, objectKey: key };
+          });
+        if (Array.isArray(compObj.evidence)) compObj.evidence = normalize(compObj.evidence);
+        if (Array.isArray(compObj.resolutionEvidence)) compObj.resolutionEvidence = normalize(compObj.resolutionEvidence);
+        return compObj;
+      });
 
       const response: PaginatedResponse<any> = {
         success: true,

@@ -42,13 +42,13 @@ export async function authenticateUser(
         if (claims.role === UserRole.ADMIN || claims.role === UserRole.OFFICER || claims.role === UserRole.CITIZEN) {
           // Immediately reject revoked or expired staff sessions
           if (claims.sessionId && StaffSessionModel.db.readyState === 1) {
-            const session = await StaffSessionModel.findById(claims.sessionId);
-            if (!session || session.isRevoked || session.expiresAt < new Date()) {
+            const session = await StaffSessionModel.findById(claims.sessionId).lean();
+            if (!session || (session as any).isRevoked || new Date((session as any).expiresAt) < new Date()) {
               throw new UnauthorizedError("Session has been revoked or expired. Please sign in again.");
             }
           }
 
-          const user = await UserModel.findById(claims.sub);
+          const user = await UserModel.findById(claims.sub).lean();
 
           if (!user) {
             logger.warn("User account not found during staff authentication", {

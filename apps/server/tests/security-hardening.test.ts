@@ -164,7 +164,7 @@ async function runSecurityHardeningTests() {
   console.log("8. Testing CSRF Origin Protection for Staff Cookies:");
   const csrfRes = await request(app)
     .post("/api/v1/complaints/test-id/verify")
-    .set("Cookie", ["civictrack_staff_access=fake-session-token"])
+    .set("Cookie", ["civictrack_admin_token=fake-session-token"])
     .set("Origin", "https://attacker.com")
     .send({ remarks: "Attacker payload" });
   console.log(`   Cross-origin staff cookie POST status: ${csrfRes.status} (Code: ${csrfRes.body.error?.code})`);
