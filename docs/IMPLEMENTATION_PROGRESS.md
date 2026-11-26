@@ -13,12 +13,12 @@
 | Phase 0: Repository Intelligence Audit | `repository-intelligence` | COMPLETED | All 8 `docs/audit/*.md` deliverables written; 230/230 tracked files accounted |
 | Phase 1: Architecture & Security Guardrails | `architecture-guardian` + `independent-reviewer` | COMPLETED | `docs/IMPLEMENTATION_GUARDRAILS.md` aligned and signed off |
 | Phase 2: Task Plan & Exclusive Ownership | `master-orchestrator` + `independent-reviewer` | COMPLETED | Disjoint file/test ownership and sequential handoffs finalized below |
-| Phase 3: Apple-Inspired Minimalist UI | `ui-modernization` | IN_PROGRESS | Sequential commit ownership over `globals.css`, `tailwind.config.ts`, `components/`, `app/**` styling |
-| Phase 4: End-to-End Workflow Integrity | `workflow-integrity` | NOT_STARTED | Sequential handoff after Phase 3; owns workflow/auth/state/map bug fixes & workflow tests |
-| Phase 5: Frontend Performance & SEO | `frontend-performance-seo` | NOT_STARTED | Sequential handoff after Phase 4; owns SSR/dynamic imports/metadata/`robots.ts`/`sitemap.ts` |
-| Phase 6: Backend API & DB Latency | `backend-performance` | NOT_STARTED | Owns `$facet` analytics, list/middleware lean+projection, batch SLA, `OlaMapsAdapter` timeouts |
-| Phase 7: Security Vulnerability Remediation | `security-engineer` | NOT_STARTED | Owns CSRF/CORS, takeover fixes, strict creator isolation, S3/Socket hardening, XSS/key fixes + test suites |
-| Phase 8: Dependency & Infra Governance | `dependency-engineer` | NOT_STARTED | Owns `@types/*` cleanup, Docker/Compose fixes, CI/docs reconciliation |
+| Phase 3: Apple-Inspired Minimalist UI | `ui-modernization` | IN_PROGRESS | Design tokens established; landing/auth/map/notifications redesigned; operational routes pending |
+| Phase 4: End-to-End Workflow Integrity | `workflow-integrity` | IN_PROGRESS | MulterError handling, cleanupOrphans NaN, swagger import fix, logout socket disconnect |
+| Phase 5: Frontend Performance & SEO | `frontend-performance-seo` | IN_PROGRESS | robots.ts, sitemap.ts, metadataBase, title template, icon, error boundaries, security headers, noindex layouts, ipapi leak removed, Ola key fallback removed, popup XSS escaped |
+| Phase 6: Backend API & DB Latency | `backend-performance` | IN_PROGRESS | complaint list presigning removed, complaint-query lean+consolidated dept query, complaint model index, OlaMaps timeout, SLA lean+parallel, clerk middleware lean, staff session single-write |
+| Phase 7: Security Vulnerability Remediation | `security-engineer` | IN_PROGRESS | CSRF cookie names, CORS typo, adminRegister takeover, syncFromClerk block, request-id validation, storage validateUploadIntents hardening, verifyViewAuthorization creator isolation, department GET /:id citizen block, maps rate limit, socket fail-closed + revocation + creator scoping, frontend security headers |
+| Phase 8: Dependency & Infra Governance | `dependency-engineer` | IN_PROGRESS | @types moved to devDeps, docker-compose ATLAS_URI/AWS bucket/OLA key, web Dockerfile prune, ci.yml permissions |
 | Phase 9: Comprehensive QA & Diff Review | `qa-engineer` + `independent-reviewer` | NOT_STARTED | Full build, typecheck, offline + deterministic security/workflow suite, diff audit |
 | Phase 10: QA Reports & Pull Request | `master-orchestrator` | NOT_STARTED | `docs/qa/*.md`, push branch, open PR against `main` |
 
