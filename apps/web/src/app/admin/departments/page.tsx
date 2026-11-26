@@ -262,14 +262,19 @@ export default function AdminDepartmentsPage() {
                   <label className="block text-xs font-semibold text-slate-700">
                     Department Code *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    placeholder="e.g. ROADS"
                     value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 uppercase font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                  />
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 uppercase font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  >
+                    <option value="">Select department code</option>
+                    {["ROADS", "WATER", "ELECTRICAL", "SWM", "GENERAL"].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1.5">
