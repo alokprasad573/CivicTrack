@@ -9,28 +9,6 @@ import {
   getClientOlaMapsApiKey,
 } from "../lib/ola-maps-config";
 
-function isBenignOlaMapError(arg: any): boolean {
-  if (!arg) return false;
-  const isMatch = (msg: string) =>
-    msg.includes("signal is aborted") ||
-    msg.includes("aborted without reason") ||
-    msg.includes("The operation was aborted") ||
-    msg.includes("The user aborted a request") ||
-    msg.includes('Source layer "3d_model"') ||
-    msg.includes("3d_model_data") ||
-    msg.includes("AbortError") ||
-    (msg.includes("Image") && msg.includes("could not be loaded"));
-
-  if (arg instanceof Error || (typeof arg === "object" && arg !== null)) {
-    if (arg.name === "AbortError") return true;
-    return isMatch(arg.message || "");
-  }
-  if (typeof arg === "string") {
-    return isMatch(arg);
-  }
-  return false;
-}
-
 const OLA_STYLE_ICON_FALLBACKS = new Set([
   "ola-mobility-fastcharger",
   "ola-mbo",
@@ -98,23 +76,7 @@ function createOlaStyleIconFallback(imageId: string): ImageData {
   return context.getImageData(0, 0, size, size);
 }
 
-// Intercept and suppress known benign Ola Maps SDK style warnings and fetch AbortErrors during teardown
-if (typeof window !== "undefined" && !(window as any).__olamaps_console_patched) {
-  (window as any).__olamaps_console_patched = true;
-  const originalConsoleError = console.error;
-  console.error = (...args: any[]) => {
-    if (args.some(isBenignOlaMapError)) {
-      return;
-    }
-    originalConsoleError.apply(console, args);
-  };
-
-  window.addEventListener("unhandledrejection", (event) => {
-    if (isBenignOlaMapError(event.reason)) {
-      event.preventDefault();
-    }
-  });
-}
+// Benign Ola Maps SDK warnings are no longer suppressed via console monkey-patching.
 
 export interface UseOlaMapOptions {
   containerId: string;
