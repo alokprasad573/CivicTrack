@@ -102,7 +102,7 @@ export default async function HomePage() {
                   <span className="text-blue-600">Track when they get fixed.</span>
                 </h1>
 
-                <p className="max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
+                <p className="max-w-xl text-base leading-relaxed text-slate-900 sm:text-lg">
                   Notice a pothole, broken streetlight, or water leak? CivicTrack sends your report
                   directly to the right municipal department and keeps you informed until the repair
                   is complete.
@@ -112,7 +112,7 @@ export default async function HomePage() {
                 <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                   <Link
                     href={isSignedIn ? "/citizen/report" : "/sign-up"}
-                    className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-6 py-3 text-sm font-medium text-white shadow-hairline transition-[background-color,transform] duration-150 hover:bg-blue-700 active:scale-[0.98]"
+                    className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-blue-600 bg-white px-6 py-3 text-sm font-medium text-slate-900 shadow-hairline transition-[background-color,transform] duration-150 hover:bg-blue-700 active:scale-[0.98]"
                   >
                     <span>Report an Issue</span>
                     <ArrowRight className="h-4 w-4" />
@@ -128,17 +128,17 @@ export default async function HomePage() {
                 </div>
 
                 {/* Benefits Row */}
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-slate-200/80 pt-6 text-xs text-slate-600 sm:text-sm">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-slate-200/80 pt-6 text-xs text-slate-900 font-semibold sm:text-sm">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
                     <span>Free for all residents</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-300" />
                     <span>Precise map location</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
                     <span>Photo proof on completion</span>
                   </div>
                 </div>

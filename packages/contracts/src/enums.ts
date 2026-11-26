@@ -29,7 +29,7 @@ export enum ComplaintCategory {
   DRAINAGE_SEWAGE = "DRAINAGE_SEWAGE",
   STREETLIGHTS = "STREETLIGHTS",
   ELECTRICITY = "ELECTRICITY",
-  OTHER = "OTHER",
+  GENERAL = "GENERAL",
 }
 
 export enum NotificationType {
