@@ -36,9 +36,10 @@ export class StorageService {
    */
   public static async createUploadIntents(params: {
     userId: string;
+    userRole?: UserRole;
     dto: CreateUploadIntentDto;
   }): Promise<UploadIntentResponse> {
-    const { userId, dto } = params;
+    const { userId, userRole, dto } = params;
     const s3Client = getS3Client();
     const bucketName = getS3BucketName();
     const expiresAt = new Date(Date.now() + PRESIGNED_UPLOAD_EXPIRY_SECONDS * 1000);
@@ -46,7 +47,13 @@ export class StorageService {
     const uploads: PresignedUploadItem[] = [];
     const rawFolder = (dto.folder || "evidence").toLowerCase().trim().replace(/^\/+|\/+$/g, "");
     const isResolved = rawFolder === "resolved" || rawFolder.startsWith("resolved");
+    if (isResolved && userRole !== UserRole.ADMIN && userRole !== UserRole.OFFICER) {
+      throw new ForbiddenError("Only staff can upload resolution evidence.");
+    }
     const complaintId = dto.complaintId || new Types.ObjectId().toString();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(complaintId) || complaintId.includes("..") || complaintId.includes("/")) {
+      throw new ValidationError("Invalid complaint ID format");
+    }
 
     for (const file of dto.files) {
       const extension = MIME_EXTENSION_MAP[file.contentType] || "bin";
@@ -147,10 +154,7 @@ export class StorageService {
   ): Promise<boolean> {
     const cleanKey = objectKey.replace(/^\/+/, "");
 
-    // 1. Admin can access all evidence
-    if (user.role === UserRole.ADMIN) {
-      return true;
-    }
+    // 1. Admin access is scoped to their own departments (creator isolation)
 
     // 2. User uploaded it themselves
     if (
@@ -205,10 +209,20 @@ export class StorageService {
       if (
         user.role === UserRole.OFFICER &&
         ((user.departmentId && deptId === user.departmentId) ||
-          officerId === user.id ||
-          !deptId)
+          officerId === user.id)
       ) {
         return true;
+      }
+
+      // Admin creator isolation: only their own departments
+      if (user.role === UserRole.ADMIN) {
+        if (!deptId) return true;
+        const { DepartmentModel } = await import("../departments/department.model.js");
+        const dept = await DepartmentModel.findById(deptId);
+        if (dept && (!dept.createdByAdminId || dept.createdByAdminId.toString() === user.id)) {
+          return true;
+        }
+        return false;
       }
     }
 
@@ -237,7 +251,6 @@ export class StorageService {
       if (!intent) {
         if (
           key.startsWith(`complaints/${userId}/`) ||
-          key.startsWith(`resolved/image/`) ||
           key.startsWith(`resolved/${userId}/`) ||
           (process.env.NODE_ENV !== "production" && key.startsWith("evidence/test/"))
         ) {
@@ -247,7 +260,6 @@ export class StorageService {
       }
       const isOwner =
         intent.userId.toString() === userId ||
-        key.startsWith("resolved/image/") ||
         (process.env.NODE_ENV !== "production" && !Types.ObjectId.isValid(userId));
       if (!isOwner) {
         throw new ForbiddenError(`Evidence file '${key}' does not belong to the authenticated user.`);
@@ -281,7 +293,7 @@ export class StorageService {
           if (s3Err?.$metadata?.httpStatusCode === 404 || s3Err?.name === "NotFound") {
             throw new ValidationError(`Evidence file '${key}' was not found in storage.`);
           }
-          logger.warn("S3 HeadObject check skipped or error encountered", { key, error: s3Err?.message });
+          throw new ValidationError(`Unable to verify evidence file '${key}' in storage.`);
         }
       }
     }

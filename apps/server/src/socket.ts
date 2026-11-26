@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { logger } from "./common/utils/logger.js";
 import { UserService } from "./modules/users/user.service.js";
 import { UserModel } from "./modules/users/user.model.js";
+import { StaffSessionModel } from "./modules/staff-auth/staff-session.model.js";
 import { JwtService } from "./modules/staff-auth/jwt.service.js";
 import {
   INotification,
@@ -90,21 +91,30 @@ export async function authorizeRoomJoin(user: SocketUser, room: string): Promise
   // 3. Department rooms: dept:<departmentId>
   if (room.startsWith("dept:")) {
     const deptId = room.substring(5);
-    if (user.role === UserRole.ADMIN) return true;
     if (user.role === UserRole.OFFICER && user.departmentId === deptId) return true;
+    if (user.role === UserRole.ADMIN) {
+      try {
+        const { DepartmentModel } = await import("./modules/departments/department.model.js");
+        const dept = await DepartmentModel.findById(deptId);
+        if (dept && (!dept.createdByAdminId || dept.createdByAdminId.toString() === user.id)) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    }
     return false;
   }
 
   // 4. Complaint rooms: complaint:<complaintId>
   if (room.startsWith("complaint:")) {
     const complaintId = room.substring(10);
-    if (user.role === UserRole.ADMIN) return true;
-
     try {
       if (!Types.ObjectId.isValid(complaintId)) return false;
       const { ComplaintModel } = await import("./modules/complaints/complaint.model.js");
       if (ComplaintModel.db.readyState !== 1) {
-        return user.role === UserRole.OFFICER || user.role === UserRole.CITIZEN;
+        return false;
       }
       const complaint = await ComplaintModel.findById(complaintId).select("citizenId departmentId assignedOfficerId");
       if (!complaint) return false;
@@ -115,9 +125,23 @@ export async function authorizeRoomJoin(user: SocketUser, room: string): Promise
       if (user.role === UserRole.OFFICER) {
         return (
           complaint.assignedOfficerId?.toString() === user.id ||
-          (Boolean(user.departmentId) && complaint.departmentId?.toString() === user.departmentId) ||
-          !complaint.departmentId
+          (Boolean(user.departmentId) && complaint.departmentId?.toString() === user.departmentId)
         );
+      }
+
+      if (user.role === UserRole.ADMIN) {
+        const deptId = complaint.departmentId?.toString();
+        if (!deptId) return true;
+        try {
+          const { DepartmentModel } = await import("./modules/departments/department.model.js");
+          const dept = await DepartmentModel.findById(deptId);
+          if (dept && (!dept.createdByAdminId || dept.createdByAdminId.toString() === user.id)) {
+            return true;
+          }
+        } catch {
+          return false;
+        }
+        return false;
       }
     } catch {
       return false;
@@ -176,7 +200,13 @@ export function initSocketServer(httpServer: HttpServer): Server {
 
         try {
           const staffPayload = JwtService.verifyAccessToken(token);
-          const userDoc = await UserModel.findById(staffPayload.sub);
+          if (staffPayload.sessionId && StaffSessionModel.db.readyState === 1) {
+             const session = await StaffSessionModel.findById(staffPayload.sessionId).lean();
+             if (!session || (session as any).isRevoked || new Date((session as any).expiresAt) < new Date()) {
+               continue;
+             }
+           }
+           const userDoc = await UserModel.findById(staffPayload.sub);
           if (userDoc && userDoc.isActive && userDoc.role === staffPayload.role) {
             authenticatedUser = {
               id: userDoc._id.toString(),

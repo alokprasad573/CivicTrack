@@ -1,5 +1,8 @@
 name: CivicTrack Continuous Integration (CI)
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, master, develop]

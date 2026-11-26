@@ -96,6 +96,9 @@ router.get(
         throw new ValidationError("Invalid department ID format");
       }
       if (req.user!.role === UserRole.OFFICER) {
+        if (!req.user!.departmentId) {
+          throw new ForbiddenError("Officer account is not assigned to a department");
+        }
         if (departmentId && departmentId !== req.user!.departmentId) {
           throw new ForbiddenError("Officers cannot view users outside their assigned department");
         }

@@ -13,24 +13,21 @@ import {
 import { LocationPicker } from "../../components/maps/location-picker";
 import { MapComplaintItem } from "../../hooks/use-complaint-markers";
 import { useGeolocation } from "../../hooks/use-geolocation";
-import { CATEGORY_COLORS, STATUS_COLORS, DEFAULT_MAP_CENTER } from "../../lib/ola-maps-config";
+import { CATEGORY_COLORS, DEFAULT_MAP_CENTER } from "../../lib/ola-maps-config";
+import { StatusBadge } from "../../components/ui/status-badge";
 import {
   MapPin,
   Navigation,
   Layers,
   ArrowLeft,
-  ShieldAlert,
   Info,
   Loader2,
   AlertCircle,
   RefreshCw,
   CheckCircle2,
-  Compass,
   Filter,
   Crosshair,
   ChevronRight,
-  Camera,
-  ExternalLink,
   EyeOff,
 } from "lucide-react";
 
@@ -42,9 +39,9 @@ const SpatialMapPreview = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[620px] rounded-2xl border border-border bg-card/60 flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <span className="text-xs text-muted-foreground font-medium">
+      <div className="w-full h-[620px] rounded-2xl border border-slate-200/90 bg-white flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+        <span className="text-xs text-slate-600 font-medium">
           Loading Municipal Spatial Map Preview...
         </span>
       </div>
@@ -114,7 +111,6 @@ function MapsExplorerContent() {
   const searchParams = useSearchParams();
   const queryLng = searchParams.get("lng");
   const queryLat = searchParams.get("lat");
-  const queryRef = searchParams.get("ref");
 
   const [activeTab, setActiveTab] = useState<"city" | "picker">("city");
 
@@ -122,10 +118,7 @@ function MapsExplorerContent() {
   const {
     coords: userCoords,
     accuracy: locationAccuracy,
-    isTracking,
-    permissionGranted,
     error: geoError,
-    getCurrentPosition,
   } = useGeolocation(true);
 
   // Search parameters
@@ -316,113 +309,135 @@ function MapsExplorerContent() {
     });
   }, [displayedComplaints, userCoords]);
 
-  // Selected complaint object
-  const activeComplaint = useMemo(() => {
-    if (!selectedComplaintId) return complaintsWithDistance[0] || null;
-    return complaintsWithDistance.find((c) => c.id === selectedComplaintId) || null;
-  }, [selectedComplaintId, complaintsWithDistance]);
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Navigation Bar */}
-      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="border-b border-slate-200/80 bg-white/85 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/"
-              className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors min-h-[44px] py-2"
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-2 -ml-2 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Home</span>
             </Link>
-            <div className="h-4 w-px bg-border" />
+            <div className="h-4 w-px bg-slate-200" aria-hidden="true" />
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
-              <h1 className="text-sm font-bold text-foreground tracking-wide">
+              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" aria-hidden="true" />
+              <h1 className="text-sm sm:text-base font-semibold tracking-tight text-slate-900">
                 City Incident Map
               </h1>
             </div>
           </div>
 
           {/* View Mode Tabs */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-xl border border-border">
-              <button
-                type="button"
-                onClick={() => setActiveTab("city")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
-                  activeTab === "city"
-                    ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Issues Map</span>
-              </button>
+          <div
+            className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80"
+            role="tablist"
+            aria-label="Map view mode"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "city"}
+              onClick={() => setActiveTab("city")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-colors min-h-[44px] ${
+                activeTab === "city"
+                  ? "bg-white text-slate-900 shadow-hairline border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-blue-600" />
+              <span>Issues Map</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("picker")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all min-h-[36px] ${
-                  activeTab === "picker"
-                    ? "bg-primary text-primary-foreground shadow-xs shadow-primary/20"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Location Finder</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "picker"}
+              onClick={() => setActiveTab("picker")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-colors min-h-[44px] ${
+                activeTab === "picker"
+                  ? "bg-white text-slate-900 shadow-hairline border border-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900 border border-transparent"
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-blue-600" />
+              <span>Location Finder</span>
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex flex-col gap-6">
         {/* Tab A: City Map View */}
         {activeTab === "city" && (
           <div className="flex flex-col gap-5">
             {/* Control Bar: Location status & radius selector */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl border border-border bg-card shadow-sm">
-              <div className="flex flex-col gap-1">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-white shadow-hairline">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <h2 className="text-base font-bold text-foreground">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      userCoords ? "bg-emerald-600" : "bg-amber-600"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <h2 className="text-base font-semibold tracking-tight text-slate-900">
                     Municipal Issues Around Your Location
                   </h2>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 tabular-nums">
                   {userCoords ? (
-                    <span className="flex items-center gap-1 text-primary text-[11px]">
+                    <span className="inline-flex items-center gap-1.5 text-blue-700 font-medium">
                       <Crosshair className="w-3.5 h-3.5" />
-                      GPS Detected: [{userCoords[0].toFixed(4)}, {userCoords[1].toFixed(4)}]
-                      {locationAccuracy ? ` (±${Math.round(locationAccuracy)}m)` : ""}
+                      <span>
+                        GPS Detected: [{userCoords[0].toFixed(4)}, {userCoords[1].toFixed(4)}]
+                        {locationAccuracy ? ` (±${Math.round(locationAccuracy)}m)` : ""}
+                      </span>
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-amber-400 text-[11px]">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      {geoError ? "GPS Permission Denied. Showing Default Municipal Zone." : "Acquiring GPS location..."}
+                    <span className="inline-flex items-center gap-1.5 text-amber-800 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
+                      <span>
+                        {geoError
+                          ? "GPS Permission Denied. Showing Default Municipal Zone."
+                          : "Acquiring GPS location..."}
+                      </span>
                     </span>
                   )}
 
-                  <span>•</span>
-                  <span>Radius: <strong className="text-foreground">{radiusMeters / 1000} km</strong></span>
+                  <span aria-hidden="true" className="text-slate-300">
+                    &middot;
+                  </span>
+                  <span>
+                    Radius:{" "}
+                    <strong className="font-semibold text-slate-900">
+                      {radiusMeters / 1000} km
+                    </strong>
+                  </span>
                 </div>
               </div>
 
               {/* Radius Options, Closed Toggle & Refresh */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center bg-secondary/60 p-1 rounded-xl border border-border gap-1">
+                <div
+                  className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 gap-1"
+                  role="group"
+                  aria-label="Search radius"
+                >
                   {RADIUS_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
                       type="button"
                       onClick={() => setRadiusMeters(opt.value)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                      className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium tabular-nums transition-colors ${
                         radiusMeters === opt.value
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                          ? "bg-white text-slate-900 shadow-hairline border border-slate-200/80"
+                          : "text-slate-600 hover:text-slate-900 border border-transparent"
                       }`}
                     >
                       {opt.label}
@@ -430,25 +445,30 @@ function MapsExplorerContent() {
                   ))}
                 </div>
 
-                {/* Feature: Hide / Show Closed Issues Toggle */}
+                {/* Hide / Show Closed Issues Toggle */}
                 <button
                   type="button"
                   onClick={() => setShowClosed((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  aria-pressed={showClosed}
+                  className={`min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors ${
                     showClosed
-                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 shadow-xs"
-                      : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200 shadow-hairline"
+                      : "bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50 border-slate-200/90 shadow-hairline"
                   }`}
-                  title={showClosed ? "Closed complaints are currently shown on the map" : "Closed complaints are hidden from the map"}
+                  title={
+                    showClosed
+                      ? "Closed complaints are currently shown on the map"
+                      : "Closed complaints are hidden from the map"
+                  }
                 >
                   {showClosed ? (
                     <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>Closed Issues: Shown</span>
                     </>
                   ) : (
                     <>
-                      <EyeOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <EyeOff className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                       <span>Closed Issues: Hidden</span>
                     </>
                   )}
@@ -457,29 +477,32 @@ function MapsExplorerContent() {
                 <button
                   type="button"
                   onClick={fetchNearbyComplaints}
-                  className="p-2 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 border border-border transition-colors"
+                  aria-label="Refresh nearby issues"
                   title="Refresh Nearby Issues"
+                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50 border border-slate-200/90 shadow-hairline transition-colors"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-primary" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
                 </button>
               </div>
             </div>
 
             {/* Filter Pills Bar: Status and Category */}
-            <div className="flex flex-col gap-2">
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-hairline flex flex-col gap-3">
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
-                  <Layers className="w-3.5 h-3.5 text-primary" /> Filter Status:
+                <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5 shrink-0 pr-1">
+                  <Layers className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Filter status:</span>
                 </span>
                 {STATUS_FILTERS.map((st) => (
                   <button
                     key={st.value}
                     type="button"
                     onClick={() => setStatusFilter(st.value)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all border ${
+                    aria-pressed={statusFilter === st.value}
+                    className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-medium shrink-0 transition-colors border ${
                       statusFilter === st.value
-                        ? "bg-primary/10 text-primary border-primary shadow-sm"
-                        : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200/90"
                     }`}
                   >
                     {st.label}
@@ -487,19 +510,21 @@ function MapsExplorerContent() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
-                  <Filter className="w-3.5 h-3.5 text-primary" /> Filter Category:
+              <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-slate-200/70 pb-1">
+                <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5 shrink-0 pr-1">
+                  <Filter className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Filter category:</span>
                 </span>
                 {CATEGORY_FILTERS.map((cat) => (
                   <button
                     key={cat.value}
                     type="button"
                     onClick={() => setCategoryFilter(cat.value)}
-                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all border ${
+                    aria-pressed={categoryFilter === cat.value}
+                    className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-medium shrink-0 transition-colors border ${
                       categoryFilter === cat.value
-                        ? "bg-primary/10 text-primary border-primary shadow-sm"
-                        : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200/90"
                     }`}
                   >
                     {cat.label}
@@ -508,31 +533,54 @@ function MapsExplorerContent() {
               </div>
             </div>
 
-            {/* Zero complaints within radius advisory */}
-            {displayedComplaints.length === 0 && !isLoading && (
-              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
+            {/* Fetch Error Advisory */}
+            {fetchError && (
+              <div
+                role="alert"
+                className="p-4 rounded-2xl border border-rose-200 bg-rose-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-800"
+              >
                 <div className="flex items-center gap-2.5">
-                  <Info className="w-5 h-5 text-amber-400 shrink-0" />
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="font-medium">{fetchError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchNearbyComplaints}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white border border-rose-200 text-rose-800 hover:bg-rose-100/60 font-medium text-xs transition-colors inline-flex items-center gap-1.5 shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </button>
+              </div>
+            )}
+
+            {/* Zero complaints within radius advisory */}
+            {displayedComplaints.length === 0 && !isLoading && !fetchError && (
+              <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3">
+                  <Info className="w-5 h-5 text-amber-700 shrink-0 mt-0.5 sm:mt-0" />
                   <div>
-                    <p className="font-semibold text-amber-300">
-                      No active open issues reported within {radiusMeters / 1000} km of your GPS coordinates.
+                    <p className="text-sm font-semibold text-amber-950">
+                      No active open issues reported within{" "}
+                      <span className="tabular-nums">{radiusMeters / 1000} km</span> of your GPS
+                      coordinates.
                     </p>
                     {!showClosed && statusFilter !== ComplaintStatus.CLOSED && (
-                      <p className="text-[11px] text-amber-400/80 mt-0.5">
+                      <p className="text-xs text-amber-800 mt-0.5">
                         Closed complaints are hidden from the map by default.
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   {!showClosed && statusFilter !== ComplaintStatus.CLOSED && (
                     <button
                       type="button"
                       onClick={() => setShowClosed(true)}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-sm flex items-center gap-1.5"
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100/60 text-amber-950 border border-amber-300 font-medium text-xs transition-colors inline-flex items-center gap-1.5 shadow-hairline"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Show Closed Issues</span>
                     </button>
                   )}
@@ -540,7 +588,7 @@ function MapsExplorerContent() {
                     <button
                       type="button"
                       onClick={() => setRadiusMeters(100000)}
-                      className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-colors shrink-0 shadow-md"
+                      className="min-h-[44px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs transition-colors shrink-0 shadow-hairline"
                     >
                       Expand to Citywide (100 km)
                     </button>
@@ -550,7 +598,7 @@ function MapsExplorerContent() {
             )}
 
             {/* The Dynamic Spatial Map */}
-            <div className="rounded-2xl overflow-hidden border border-border shadow-2xl relative">
+            <div className="rounded-2xl overflow-hidden border border-slate-200/90 shadow-elevated relative bg-white">
               <SpatialMapPreview
                 complaints={displayedComplaints}
                 selectedComplaintId={selectedComplaintId}
@@ -564,90 +612,88 @@ function MapsExplorerContent() {
 
             {/* Nearby Complaints Incident List */}
             {complaintsWithDistance.length > 0 && (
-              <div className="flex flex-col gap-3 mt-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-primary" />
+              <div className="flex flex-col gap-3 mt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h3 className="text-sm sm:text-base font-semibold tracking-tight text-slate-900 flex items-center gap-2 tabular-nums">
+                    <MapPin className="w-4 h-4 text-blue-600" />
                     <span>Active Issues Sorted by Proximity ({complaintsWithDistance.length})</span>
                   </h3>
-                  <span className="text-xs text-muted-foreground">Click any card to fly map camera to incident</span>
+                  <span className="text-xs text-slate-600">
+                    Select any card to center the map on that incident
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {complaintsWithDistance.map((c) => {
                     const isSelected = selectedComplaintId === c.id;
                     const catColor = CATEGORY_COLORS[c.category as ComplaintCategory] || "#14b8a6";
-                    const statusConfig = STATUS_COLORS[c.status as ComplaintStatus] || {
-                      bg: "bg-secondary",
-                      text: "text-muted-foreground",
-                      border: "border-border",
-                    };
 
                     return (
-                      <div
+                      <article
                         key={c.id}
-                        onClick={() => setSelectedComplaintId(isSelected ? null : c.id)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 text-xs bg-card ${
+                        className={`rounded-2xl border transition-colors flex flex-col justify-between gap-3 p-4 bg-white ${
                           isSelected
-                            ? "border-primary ring-2 ring-primary/30 shadow-lg bg-primary/5"
-                            : "border-border hover:border-primary/40 hover:bg-secondary/20 shadow-sm"
+                            ? "border-blue-600 ring-2 ring-blue-600/20 shadow-elevated bg-blue-50/30"
+                            : "border-slate-200/90 hover:border-slate-300 shadow-hairline"
                         }`}
                       >
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold text-primary text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedComplaintId(isSelected ? null : c.id)}
+                          aria-pressed={isSelected}
+                          className="text-left flex flex-col gap-2.5 w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <span className="font-mono font-semibold text-blue-700 text-xs tabular-nums">
                               {c.referenceNumber}
                             </span>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
                               {c.distanceKm !== null && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                                  <Navigation className="w-2.5 h-2.5" />
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/80 inline-flex items-center gap-1 tabular-nums">
+                                  <Navigation className="w-3 h-3" />
                                   {formatDistance(c.distanceKm)}
                                 </span>
                               )}
-                              <span
-                                className={`text-[10px] font-semibold px-2 py-0.5 rounded border capitalize ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}
-                              >
-                                {c.status.replace(/_/g, " ")}
-                              </span>
+                              <StatusBadge status={c.status} />
                             </div>
                           </div>
 
-                          <h4 className="font-bold text-foreground text-sm line-clamp-2">
+                          <h4 className="font-semibold text-slate-900 text-sm line-clamp-2 leading-snug">
                             {c.title}
                           </h4>
 
-                          <p className="text-muted-foreground line-clamp-2 text-[11px] leading-relaxed">
+                          <p className="text-slate-600 line-clamp-2 text-xs leading-relaxed">
                             {c.description || "Civic infrastructure issue reported by citizen"}
                           </p>
-                        </div>
+                        </button>
 
-                        <div className="flex flex-col gap-2 pt-2 border-t border-border/60">
-                          <div className="flex items-center gap-1.5 text-muted-foreground text-[11px] truncate">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: catColor }}
-                            />
-                            <span className="capitalize">{c.category.replace(/_/g, " ")}</span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <div className="flex items-center gap-1 truncate max-w-[200px]">
-                              <MapPin className="w-3 h-3 text-primary shrink-0" />
+                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200/80 text-xs text-slate-600">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: catColor }}
+                                aria-hidden="true"
+                              />
+                              <span className="capitalize truncate font-medium text-slate-700">
+                                {c.category.replace(/_/g, " ")}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-600">
+                              <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                               <span className="truncate">{c.address}</span>
                             </div>
-
-                            <Link
-                              href={`/citizen/complaints/${c.id}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-primary hover:underline font-semibold flex items-center gap-1 shrink-0"
-                            >
-                              <span>Details</span>
-                              <ChevronRight className="w-3 h-3" />
-                            </Link>
                           </div>
+
+                          <Link
+                            href={`/citizen/complaints/${c.id}`}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-2 min-h-[44px] rounded-xl text-xs font-medium text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200/80 transition-colors shrink-0"
+                          >
+                            <span>Details</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Link>
                         </div>
-                      </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -659,32 +705,36 @@ function MapsExplorerContent() {
         {/* Tab B: Location Picker for Complaint Submission */}
         {activeTab === "picker" && (
           <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-foreground">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900">
                 Complaint Location Pin Picker
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Drop pin on map or enter GPS coordinates manually. Reverse geocoding provides address suggestions.
+              <p className="text-sm text-slate-600">
+                Drop pin on map or enter GPS coordinates manually. Reverse geocoding provides
+                address suggestions.
               </p>
             </div>
 
-            <LocationPicker
-              value={pickedLocation}
-              address={pickedAddress}
-              onChange={(loc, addr) => {
-                hasAutoSyncedPickerRef.current = true;
-                setPickedLocation(loc);
-                if (addr) setPickedAddress(addr);
-              }}
-            />
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-hairline">
+              <LocationPicker
+                value={pickedLocation}
+                address={pickedAddress}
+                onChange={(loc, addr) => {
+                  hasAutoSyncedPickerRef.current = true;
+                  setPickedLocation(loc);
+                  if (addr) setPickedAddress(addr);
+                }}
+              />
+            </div>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-border bg-card/60 mt-1">
-              <span className="text-xs text-muted-foreground">
-                Location confirmed? Proceed to submit your incident report with this pinpointed coordinate.
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-slate-200/90 bg-white shadow-hairline">
+              <span className="text-xs text-slate-600 leading-relaxed">
+                Location confirmed? Proceed to submit your incident report with this pinpointed
+                coordinate.
               </span>
               <Link
                 href="/citizen/report"
-                className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-xl hover:bg-primary/90 transition-all shadow-md shrink-0"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-xl border border-blue-600 shadow-hairline transition-[background-color,transform] duration-150 active:scale-[0.98] shrink-0"
               >
                 <span>Proceed to Report</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -701,9 +751,11 @@ export default function MapsExplorerPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          <span className="text-xs font-semibold text-slate-500">Loading Geospatial Explorer...</span>
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+          <span className="text-xs font-medium text-slate-600">
+            Loading Geospatial Explorer...
+          </span>
         </div>
       }
     >

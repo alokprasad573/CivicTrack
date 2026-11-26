@@ -3,7 +3,7 @@
 **Role:** Frontend design-system and UI engineer.  
 **Required skill:** `civictrack-minimalist-ui`  
 **Primary responsibility:** Application-wide minimalist UI modernization with full behavioral parity.  
-**Repository areas:** `apps/web/src/app/`, `apps/web/src/components/`, `apps/web/src/app/globals.css`, current Tailwind configuration.
+**Repository areas:** `apps/web/src/app/`, `apps/web/src`, `apps/web/src/components/`, `apps/web/src/app/globals.css`, current Tailwind configuration.
 
 ## Responsibilities
 - Establish existing-stack design tokens and reusable styling conventions.

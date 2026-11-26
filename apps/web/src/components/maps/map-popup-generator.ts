@@ -56,6 +56,15 @@ const STATUS_COLOR_HEX: Record<ComplaintStatus, { bg: string; text: string; bord
   },
 };
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function generateComplaintPopupHtml(data: PopupComplaintData): string {
   const categoryColor = CATEGORY_COLORS[data.category] || "#94a3b8";
   const categoryLabel = (data.category || "").replace(/_/g, " ");
@@ -82,22 +91,22 @@ export function generateComplaintPopupHtml(data: PopupComplaintData): string {
     <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 250px; max-width: 290px; padding: 6px; color: #f1f5f9; background: #0f172a; border-radius: 10px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);">
       <!-- Top Row: Ref number & Status -->
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px;">
-        <span style="font-size: 11px; font-weight: 800; font-family: monospace; color: #00e5c3; letter-spacing: 0.5px;">${data.referenceNumber}</span>
+        <span style="font-size: 11px; font-weight: 800; font-family: monospace; color: #00e5c3; letter-spacing: 0.5px;">${escapeHtml(data.referenceNumber)}</span>
         <span style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: ${statusStyle.bg}; color: ${statusStyle.text}; border: 1px solid ${statusStyle.border}; text-transform: capitalize; white-space: nowrap;">
-          ${statusLabel}
+          ${escapeHtml(statusLabel)}
         </span>
       </div>
 
       <!-- Title -->
       <div style="font-size: 13px; font-weight: 700; color: #f8fafc; line-height: 1.35; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-        ${data.title}
+        ${escapeHtml(data.title)}
       </div>
 
       <!-- Description Snippet (if available) -->
       ${
         descriptionSnippet
           ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-bottom: 7px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-              ${descriptionSnippet}
+              ${escapeHtml(descriptionSnippet)}
             </div>`
           : ""
       }
@@ -106,11 +115,11 @@ export function generateComplaintPopupHtml(data: PopupComplaintData): string {
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; font-size: 11px;">
         <div style="display: flex; align-items: center; gap: 5px;">
           <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${categoryColor}; flex-shrink: 0;"></span>
-          <span style="color: #cbd5e1; text-transform: capitalize; font-weight: 500;">${categoryLabel}</span>
+          <span style="color: #cbd5e1; text-transform: capitalize; font-weight: 500;">${escapeHtml(categoryLabel)}</span>
         </div>
         ${
           data.priority
-            ? `<span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.06); color: #94a3b8; text-transform: uppercase;">${data.priority}</span>`
+            ? `<span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.06); color: #94a3b8; text-transform: uppercase;">${escapeHtml(data.priority)}</span>`
             : ""
         }
       </div>
@@ -118,11 +127,11 @@ export function generateComplaintPopupHtml(data: PopupComplaintData): string {
       <!-- Address -->
       <div style="display: flex; align-items: flex-start; gap: 4px; font-size: 11px; color: #64748b; line-height: 1.3; margin-bottom: 10px; word-break: break-word;">
         <span style="flex-shrink: 0;">📍</span>
-        <span style="overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${data.address}</span>
+        <span style="overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${escapeHtml(data.address)}</span>
       </div>
 
       <!-- Action Button -->
-      <a href="${detailsHref}" style="display: block; width: 100%; text-align: center; padding: 7px 0; background: #00e5c3; color: #020617; font-size: 11px; font-weight: 700; border-radius: 6px; text-decoration: none; cursor: pointer; transition: background 0.15s ease;" onmouseover="this.style.background='#22d3ee'" onmouseout="this.style.background='#00e5c3'">
+      <a href="${escapeHtml(detailsHref)}" style="display: block; width: 100%; text-align: center; padding: 7px 0; background: #00e5c3; color: #020617; font-size: 11px; font-weight: 700; border-radius: 6px; text-decoration: none; cursor: pointer;">
         View Full Details →
       </a>
     </div>

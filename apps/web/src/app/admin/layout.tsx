@@ -1,20 +1,10 @@
-"use client";
+import type { Metadata } from "next";
+import AdminPortalGate from "../../components/layout/admin-portal-gate";
 
-import React from "react";
-import { usePathname } from "next/navigation";
-import { AdminShell } from "../../components/layout/admin-shell";
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-
-  // If on login or registration screen, render directly without the authenticated AdminShell chrome
-  if (pathname.startsWith("/admin/login") || pathname.startsWith("/admin/register")) {
-    return <>{children}</>;
-  }
-
-  return <AdminShell>{children}</AdminShell>;
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AdminPortalGate>{children}</AdminPortalGate>;
 }

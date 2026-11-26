@@ -181,6 +181,7 @@ ComplaintSchema.index({ location: "2dsphere" });
 ComplaintSchema.index({ citizenId: 1, createdAt: -1 });
 ComplaintSchema.index({ status: 1, createdAt: -1 });
 ComplaintSchema.index({ departmentId: 1, status: 1, priority: 1 });
+ComplaintSchema.index({ departmentId: 1, createdAt: -1 });
 ComplaintSchema.index({ assignedOfficerId: 1, status: 1 });
 
 export const ComplaintModel: Model<IComplaintDocument> =

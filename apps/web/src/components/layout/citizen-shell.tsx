@@ -13,7 +13,6 @@ import {
   X,
   Landmark,
   ChevronRight,
-  Bell,
 } from "lucide-react";
 import { NotificationBell } from "../notifications/notification-bell";
 
@@ -44,38 +43,37 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground antialiased pb-20 lg:pb-0">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-card/90 border-b border-border shadow-xs">
+      <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           {/* Brand Logo & Mobile Trigger */}
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="lg:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            <Link href="/citizen" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
-                <Landmark className="w-5 h-5" />
+            <Link href="/citizen" className="flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white border border-blue-700/20 shrink-0">
+                <Landmark className="w-4 h-4" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-lg tracking-tight text-foreground">
-                    CivicTrack
-                  </span>
-                  <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                    Citizen
-                  </span>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-base sm:text-lg tracking-tight text-slate-900">
+                  CivicTrack
+                </span>
+                <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                  Citizen
+                </span>
               </div>
             </Link>
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1.5" aria-label="Citizen portal navigation">
+          <nav className="hidden lg:flex items-center gap-1" aria-label="Citizen portal navigation">
             {CITIZEN_NAV.map((nav) => {
               const Icon = nav.icon;
               const isActive =
@@ -88,13 +86,14 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={nav.id}
                   href={nav.href}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all min-h-[44px] ${
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm whitespace-nowrap transition-colors duration-150 min-h-[44px] ${
                     isActive
-                      ? "bg-secondary text-primary font-bold shadow-xs border border-border"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                      ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                      : "text-slate-600 font-medium hover:text-slate-900 hover:bg-slate-100/80 border border-transparent"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? "text-primary" : "opacity-70"}`} />
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-blue-700" : "text-slate-500"}`} />
                   <span>{nav.label}</span>
                 </Link>
               );
@@ -102,24 +101,24 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Right Header User Controls */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <NotificationBell role="citizen" />
 
             {isLoaded && (
-              <div className="flex items-center gap-2.5 pl-2 border-l border-border">
+              <div className="flex items-center gap-2.5 pl-2.5 border-l border-slate-200/80">
                 <UserButton
                   appearance={{
                     elements: {
-                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-border bg-blue-600 text-white [&_*]:text-white [&_svg]:fill-white",
-                      userButtonTrigger: "rounded-full bg-blue-600 text-white",
+                      userButtonAvatarBox: "h-8 w-8 ring-1 ring-slate-200",
+                      userButtonTrigger: "rounded-full",
                     },
                   }}
                 />
                 <div className="hidden sm:block text-left text-xs">
-                  <div className="font-semibold text-foreground leading-tight truncate max-w-[120px]">
+                  <div className="font-semibold text-slate-900 leading-tight truncate max-w-[140px]">
                     {user?.fullName || user?.firstName || "Resident"}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-[11px] text-slate-600">
                     Citizen Portal
                   </div>
                 </div>
@@ -130,9 +129,9 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Navigation Dropdown Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-border bg-card p-4 space-y-2 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase px-2 mb-2">
-              Menu Navigation
+          <div className="lg:hidden border-t border-slate-200/80 bg-white px-4 py-3 space-y-1 shadow-elevated animate-in fade-in slide-in-from-top-2 duration-150">
+            <p className="text-xs font-medium text-slate-500 px-2 py-1">
+              Navigation
             </p>
             {CITIZEN_NAV.map((nav) => {
               const Icon = nav.icon;
@@ -147,17 +146,18 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
                   key={nav.id}
                   href={nav.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition min-h-[48px] ${
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-colors min-h-[44px] ${
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-foreground hover:bg-secondary"
+                      ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                      : "text-slate-700 font-medium hover:bg-slate-100 border border-transparent"
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className="w-5 h-5" />
+                    <Icon className={`w-4 h-4 ${isActive ? "text-blue-700" : "text-slate-500"}`} />
                     <span>{nav.label}</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 opacity-50" />
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
                 </Link>
               );
             })}
@@ -170,10 +170,10 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (48px+ touch targets) */}
+      {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile navigation bar"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border lg:hidden px-2 py-1 shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-t border-slate-200/80 lg:hidden px-2 py-1.5"
       >
         <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
           {CITIZEN_NAV.map((nav) => {
@@ -188,14 +188,15 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={nav.id}
                 href={nav.href}
-                className={`flex flex-col items-center justify-center py-2 rounded-xl text-[10px] font-semibold transition min-h-[48px] ${
+                aria-current={isActive ? "page" : undefined}
+                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] transition-colors min-h-[48px] ${
                   isActive
-                    ? "text-primary font-bold bg-primary/10"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                    : "text-slate-600 font-medium hover:text-slate-900 border border-transparent"
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "opacity-75"}`} />
-                <span className="mt-1 truncate max-w-[70px] text-center">{nav.label}</span>
+                <Icon className={`w-5 h-5 ${isActive ? "text-blue-700" : "text-slate-500"}`} />
+                <span className="mt-1 truncate max-w-[72px] text-center">{nav.label}</span>
               </Link>
             );
           })}
@@ -203,15 +204,15 @@ export function CitizenShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Desktop Footer */}
-      <footer className="border-t border-border bg-card/50 py-5 text-xs text-muted-foreground mt-auto">
+      <footer className="border-t border-slate-200/80 bg-white/70 py-5 text-xs text-slate-600 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <p>© {new Date().getFullYear()} CivicTrack &bull; Smart City Civic Issue Resolution Platform</p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Fast Reporting</span>
-            <span>&bull;</span>
-            <span>Live Location Pinning</span>
-            <span>&bull;</span>
-            <span>Transparent Tracking</span>
+          <p>© {new Date().getFullYear()} CivicTrack · Municipal Civic Issue Resolution Platform</p>
+          <div className="flex items-center gap-4 text-xs text-slate-600">
+            <span>Issue reporting</span>
+            <span aria-hidden="true">·</span>
+            <span>Location pinning</span>
+            <span aria-hidden="true">·</span>
+            <span>Status tracking</span>
           </div>
         </div>
       </footer>

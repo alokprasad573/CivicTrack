@@ -17,8 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUser,
-  SlidersHorizontal,
-  CircleCheck,
 } from "lucide-react";
 import { NotificationBell } from "../notifications/notification-bell";
 import { StaffAuthProvider, useStaffAuth } from "../../context/staff-auth-context";
@@ -42,47 +40,68 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useStaffAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground antialiased pb-16 lg:pb-0">
+    <div className="min-h-screen flex bg-background text-foreground antialiased pb-20 lg:pb-0">
       {/* Desktop Collapsible Sidebar */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-border bg-card transition-all duration-300 sticky top-0 h-screen z-30 shrink-0 ${
-          sidebarCollapsed ? "w-18" : "w-64"
+        className={`hidden lg:flex flex-col border-r border-slate-200/80 bg-white transition-[width] duration-200 ease-apple sticky top-0 h-screen z-30 shrink-0 ${
+          sidebarCollapsed ? "w-[72px]" : "w-64"
         }`}
         aria-label="Staff administration sidebar"
       >
         {/* Brand Header */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-          <Link href="/admin" className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 shrink-0">
-              <Landmark className="w-5 h-5" />
+        <div
+          className={`h-16 flex items-center border-b border-slate-200/80 ${
+            sidebarCollapsed ? "justify-center px-2" : "justify-between px-4"
+          }`}
+        >
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white border border-blue-700/20 shrink-0">
+              <Landmark className="w-4 h-4" />
             </div>
             {!sidebarCollapsed && (
               <div className="truncate">
-                <span className="font-bold text-base tracking-tight text-foreground block truncate">
+                <span className="font-semibold text-base tracking-tight text-slate-900 block truncate">
                   CivicTrack
                 </span>
-                <span className="text-[10px] text-muted-foreground block truncate">
+                <span className="text-[11px] text-slate-600 block truncate">
                   Operations Hub
                 </span>
               </div>
             )}
           </Link>
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition"
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Sidebar Nav Items */}
-        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto" aria-label="Staff navigation">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Staff navigation">
+          {sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="w-full flex items-center justify-center py-2.5 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors min-h-[44px] mb-1"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+
           {ADMIN_NAV.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -95,87 +114,90 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
                 key={item.id}
                 href={item.href}
                 title={sidebarCollapsed ? item.label : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all min-h-[44px] ${
+                aria-current={isActive ? "page" : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors duration-150 min-h-[44px] ${
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                    : "text-slate-600 font-medium hover:text-slate-900 hover:bg-slate-100/80 border border-transparent"
                 } ${sidebarCollapsed ? "justify-center px-2" : ""}`}
               >
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive ? "text-blue-700" : "text-slate-500"
+                  }`}
+                />
                 {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        {/* Sidebar Footer User & Controls */}
-        <div className="p-3 border-t border-border space-y-2">
-          {!sidebarCollapsed ? (
-            <div className="flex items-center justify-between p-2 rounded-xl bg-secondary/50">
-              <div className="flex items-center gap-2.5 truncate">
-                <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 shrink-0">
-                  <CircleUser className="w-5 h-5" />
+        {/* Sidebar Footer User */}
+        <div className="p-3 border-t border-slate-200/80">
+          <div
+            className={`flex items-center p-2 rounded-xl bg-slate-50 border border-slate-200/80 ${
+              sidebarCollapsed ? "justify-center" : "gap-2.5"
+            }`}
+          >
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-700 shrink-0">
+              <CircleUser className="w-4 h-4" />
+            </div>
+            {!sidebarCollapsed && (
+              <div className="truncate text-left text-xs min-w-0">
+                <div className="font-semibold text-slate-900 truncate">
+                  {user?.name || "Administrator"}
                 </div>
-                <div className="truncate text-left text-xs">
-                  <div className="font-semibold text-foreground truncate">{user?.name || "Administrator"}</div>
-                  <div className="text-[10px] text-muted-foreground truncate">{user?.email || "Staff Admin"}</div>
+                <div className="text-[11px] text-slate-600 truncate">
+                  {user?.email || "Staff Admin"}
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between p-2 rounded-xl bg-secondary/50">
-              <div className="flex items-center gap-2.5 truncate">
-                <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20 shrink-0">
-                  <CircleUser className="w-5 h-5" />
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 backdrop-blur-md bg-card/90 border-b border-border h-16 flex items-center justify-between px-4 sm:px-6">
+        <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-slate-200/80 h-16 flex items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="lg:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-base sm:text-lg tracking-tight text-foreground">
-                  City Operations Hub
-                </span>
-                <span className="hidden sm:inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-primary/10 text-primary border-primary/20">
-                  ADMIN
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-base sm:text-lg tracking-tight text-slate-900">
+                City Operations Hub
+              </span>
+              <span className="hidden sm:inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                Admin
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <NotificationBell role="admin" />
-            <div className="hidden sm:flex items-center gap-2.5 pl-2.5 border-l border-border">
+            <div className="hidden sm:flex items-center gap-2.5 pl-2.5 border-l border-slate-200/80">
               <div className="text-right text-xs">
-                <div className="font-semibold text-foreground truncate max-w-[130px]">
-                  Sign Out
+                <div className="font-semibold text-slate-900 truncate max-w-[140px]">
+                  {user?.name || "Administrator"}
                 </div>
-                <div className="text-[10px] font-semibold text-primary">
-                  ADMIN
+                <div className="text-[11px] text-slate-600">
+                  Admin Portal
                 </div>
               </div>
               <button
                 type="button"
                 onClick={logout}
                 title="Sign out of Municipal Admin Portal"
-                className="p-2 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Sign out of Municipal Admin Portal"
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-700 hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -184,9 +206,9 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
 
           {/* Mobile Drawer Menu */}
           {mobileMenuOpen && (
-            <div className="lg:hidden absolute top-16 left-0 right-0 border-b border-border bg-card p-4 space-y-2 shadow-2xl animate-in fade-in slide-in-from-top-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase px-2 mb-2">
-                Operations Navigation
+            <div className="lg:hidden absolute top-16 left-0 right-0 border-b border-slate-200/80 bg-white p-4 space-y-1.5 shadow-elevated animate-in fade-in slide-in-from-top-2 duration-150">
+              <p className="text-xs font-medium text-slate-500 px-2 py-1">
+                Operations navigation
               </p>
               {ADMIN_NAV.map((item) => {
                 const Icon = item.icon;
@@ -200,28 +222,33 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
                     key={item.id}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition min-h-[48px] ${
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition-colors min-h-[44px] ${
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-foreground hover:bg-secondary"
+                        ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                        : "text-slate-700 font-medium hover:bg-slate-100 border border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className="w-5 h-5" />
+                      <Icon className={`w-4 h-4 ${isActive ? "text-blue-700" : "text-slate-500"}`} />
                       <span>{item.label}</span>
                     </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
                   </Link>
                 );
               })}
 
-              <div className="pt-3 border-t border-border">
+              <div className="pt-2 border-t border-slate-200/80">
                 <button
                   type="button"
-                  onClick={logout}
-                  className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition min-h-[48px]"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-rose-700 hover:bg-rose-50 rounded-xl transition-colors min-h-[44px]"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
+                  <span>Sign out</span>
                 </button>
               </div>
             </div>
@@ -234,10 +261,10 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (48px+ touch targets) */}
+      {/* Mobile Bottom Navigation Bar */}
       <nav
         aria-label="Mobile staff navigation"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border lg:hidden px-2 py-1 shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-t border-slate-200/80 lg:hidden px-2 py-1.5"
       >
         <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
           {ADMIN_NAV.slice(0, 4).map((item) => {
@@ -251,14 +278,15 @@ function AdminShellContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex flex-col items-center justify-center py-2 rounded-xl text-[10px] font-semibold transition min-h-[48px] ${
+                aria-current={isActive ? "page" : undefined}
+                className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] transition-colors min-h-[48px] ${
                   isActive
-                    ? "text-primary font-bold bg-primary/10"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-blue-50/80 text-blue-700 font-semibold border border-blue-200/60"
+                    : "text-slate-600 font-medium hover:text-slate-900 border border-transparent"
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "opacity-75"}`} />
-                <span className="mt-1 truncate max-w-[70px] text-center">{item.label}</span>
+                <Icon className={`w-5 h-5 ${isActive ? "text-blue-700" : "text-slate-500"}`} />
+                <span className="mt-1 truncate max-w-[72px] text-center">{item.label}</span>
               </Link>
             );
           })}

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { StaffAuthService } from "./staff-auth.service.js";
+import { JwtService } from "./jwt.service.js";
 import {
   UserRole,
   ApiResponse,
@@ -154,9 +155,14 @@ export class StaffAuthController {
    */
   public static async adminLogout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (req.user?.id) {
-        disconnectUserSockets(req.user.id);
+      let logoutUserId = req.user?.id;
+      if (!logoutUserId) {
+        const token = req.cookies?.civictrack_admin_token || req.cookies?.civictrack_officer_token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.substring(7) : undefined);
+        if (token) {
+          try { const claims = JwtService.verifyAccessToken(token); logoutUserId = claims.sub; } catch (e) { }
+        }
       }
+      if (logoutUserId) { disconnectUserSockets(logoutUserId); }
       const refreshToken = req.cookies?.civictrack_admin_refresh || req.body?.refreshToken;
       const accessToken = req.cookies?.civictrack_admin_token || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.substring(7) : undefined);
       await StaffAuthService.logout(refreshToken, accessToken);
@@ -251,9 +257,14 @@ export class StaffAuthController {
    */
   public static async officerLogout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (req.user?.id) {
-        disconnectUserSockets(req.user.id);
+      let logoutUserId = req.user?.id;
+      if (!logoutUserId) {
+        const token = req.cookies?.civictrack_admin_token || req.cookies?.civictrack_officer_token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.substring(7) : undefined);
+        if (token) {
+          try { const claims = JwtService.verifyAccessToken(token); logoutUserId = claims.sub; } catch (e) { }
+        }
       }
+      if (logoutUserId) { disconnectUserSockets(logoutUserId); }
       const refreshToken = req.cookies?.civictrack_officer_refresh || req.body?.refreshToken;
       const accessToken = req.cookies?.civictrack_officer_token || (req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.substring(7) : undefined);
       await StaffAuthService.logout(refreshToken, accessToken);

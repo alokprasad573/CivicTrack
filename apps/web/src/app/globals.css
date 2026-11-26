@@ -5,34 +5,38 @@
 
 @layer base {
   :root {
-    /* Bootstrap Typography & Font System Variables */
-    --bs-font-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    --bs-body-font-family: var(--bs-font-sans-serif);
-    --bs-body-font-size: 1rem;
-    --bs-body-font-weight: 400;
-    --bs-body-line-height: 1.5;
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 
-    /* PolicyOracle Design System — Soft Slate & Pure White with Professional Blue/Indigo (Permanent Light Theme) */
-    --background: 210 40% 98%;       /* #F8FAFC soft slate */
-    --foreground: 222 47% 11%;       /* #0F172A dark slate */
-    --card: 0 0% 100%;               /* #FFFFFF pure white */
+    /* CivicTrack Restrained Light Design Tokens */
+    --background: 210 40% 98%;          /* #F8FAFC soft slate canvas */
+    --foreground: 222 47% 11%;          /* #0F172A primary slate text */
+    --surface: 210 40% 98%;             /* #F8FAFC base surface */
+    --surface-elevated: 0 0% 100%;      /* #FFFFFF elevated card/panel */
+    --surface-subtle: 210 40% 96%;      /* #F1F5F9 nested subtle surface */
+    --card: 0 0% 100%;                  /* #FFFFFF pure white card */
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 221 83% 53%;          /* #2563EB professional blue */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 214 32% 91%;        /* #E2E8F0 light slate */
+    --primary: 221 83% 53%;             /* #2563EB restrained civic blue */
+    --primary-foreground: 0 0% 100%;    /* #FFFFFF high-contrast text on primary */
+    --secondary: 214 27% 93%;           /* #E8EDF3 subtle neutral control fill */
     --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;            /* #F1F5F9 */
-    --muted-foreground: 215 16% 47%; /* #64748B slate gray */
-    --accent: 239 84% 67%;           /* #6366F1 / #4F46E5 indigo */
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;        /* #EF4444 rose/red */
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;           /* #E2E8F0 subtle border */
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;             /* #2563EB focus ring */
-    --radius: 0.75rem;               /* rounded-xl standard */
+    --muted: 210 40% 96%;               /* #F1F5F9 muted surface */
+    --muted-foreground: 215 20% 41%;    /* #536277 WCAG AA slate secondary text */
+    --accent: 214 95% 96%;              /* #EFF6FF restrained blue selection tint */
+    --accent-foreground: 221 83% 43%;   /* #1D4ED8 accessible blue emphasis */
+    --destructive: 0 73% 46%;           /* #CB2020 WCAG AA alert red */
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;              /* #E2E8F0 subtle hairline border */
+    --input: 214 32% 89%;               /* #D9E2EC input hairline border */
+    --hairline: 222 47% 11% / 0.08;     /* 8% slate hairline token */
+    --ring: 221 83% 53%;                /* #2563EB focus ring */
+    --radius: 0.75rem;                  /* 12px base radius */
+
+    --shadow-hairline: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+    --shadow-elevated: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+    --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
 
@@ -40,12 +44,31 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground antialiased min-h-screen selection:bg-blue-600/15 selection:text-blue-700;
-    font-family: var(--bs-body-font-family);
-    font-size: var(--bs-body-font-size);
-    font-weight: var(--bs-body-font-weight);
-    line-height: var(--bs-body-line-height);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :where(a, button, summary, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

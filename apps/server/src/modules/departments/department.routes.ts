@@ -105,6 +105,16 @@ router.get(
           });
           return;
         }
+      } else {
+        // Citizens (and any other role) cannot view department details
+        res.status(403).json({
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "You do not have permission to view department details.",
+          },
+        });
+        return;
       }
 
       const response: ApiResponse<IDepartmentDocument> = {

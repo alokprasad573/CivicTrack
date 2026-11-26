@@ -40,7 +40,7 @@ export class OlaMapsAdapter {
     if (isOlaMapsConfigured() && apiKey) {
       try {
         const url = `${this.BASE_URL}/places/v1/reverse-geocode?latlng=${lat},${lng}&api_key=${apiKey}`;
-        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) });
 
         if (res.ok) {
           const json = (await res.json()) as any;
@@ -90,7 +90,7 @@ export class OlaMapsAdapter {
     if (isOlaMapsConfigured() && apiKey) {
       try {
         const url = `${this.BASE_URL}/places/v1/geocode?address=${encodeURIComponent(query)}&api_key=${apiKey}`;
-        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) });
 
         if (res.ok) {
           const json = (await res.json()) as any;
@@ -139,7 +139,7 @@ export class OlaMapsAdapter {
       try {
         // Supported Ola Maps directions endpoint: origin=lat,lng&destination=lat,lng
         const url = `${this.BASE_URL}/routing/v1/directions?origin=${origin[1]},${origin[0]}&destination=${destination[1]},${destination[0]}&mode=driving&api_key=${apiKey}`;
-        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) });
 
         if (res.ok) {
           const data = (await res.json()) as any;
