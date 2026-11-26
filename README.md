@@ -1,305 +1,139 @@
-<div align="center">
+# CivicTrack — Smart Civic Complaint Management Platform
 
-# 🏛️ CivicTrack
-### Smart Municipal Civic Complaint Management & Real-Time Resolution Platform
+> **Real-time municipal issue reporting, triage, field resolution, and SLA monitoring** built as an npm Workspaces TypeScript monorepo.
 
-[![CI/CD Pipeline](https://github.com/alokprasad573/CivicTrack/actions/workflows/ci.yml/badge.svg)](https://github.com/alokprasad573/CivicTrack/actions/workflows/ci.yml)
-[![Node.js](https://img.shields.io/badge/Node.js-24.x-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16_(App_Router)-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas_2dsphere-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8_Realtime-010101?logo=socket.io&logoColor=white)](https://socket.io/)
-[![Docker](https://img.shields.io/badge/Docker-Multi--stage_Builds-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Ola Maps](https://img.shields.io/badge/Ola_Maps-Web_SDK_v2_%26_Routing-00A859?logo=maplibre&logoColor=white)](https://maps.olacabs.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js >=24.0.0](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-339933?logo=node.js&logoColor=white)](package.json)
+[![TypeScript 5.7](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
+[![npm Workspaces](https://img.shields.io/badge/Monorepo-npm%20Workspaces-CB3837?logo=npm&logoColor=white)](package.json)
+[![Next.js 16.4](https://img.shields.io/badge/Next.js-16.4-black?logo=next.js&logoColor=white)](apps/web/package.json)
+[![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](apps/web/package.json)
+[![Tailwind CSS 3.4](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)](apps/web/tailwind.config.ts)
+[![Express 4.21](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)](apps/server/package.json)
+[![MongoDB Mongoose 8](https://img.shields.io/badge/MongoDB-Mongoose%208-47A248?logo=mongodb&logoColor=white)](apps/server/package.json)
+[![Socket.IO 4.8](https://img.shields.io/badge/Socket.IO-4.8-010101?logo=socket.io&logoColor=white)](docs/API_DOCUMENTATION.md)
+[![Zod 3.24](https://img.shields.io/badge/Zod-3.24-3E67B1?logo=zod&logoColor=white)](packages/contracts/package.json)
+[![Clerk & Staff JWT Auth](https://img.shields.io/badge/Auth-Clerk%20%2B%20Staff%20JWT-6C47FF?logo=clerk&logoColor=white)](docs/ARCHITECTURE.md)
+[![AWS S3 Storage](https://img.shields.io/badge/Storage-AWS%20S3-FF9900?logo=amazonwebservices&logoColor=white)](docs/ARCHITECTURE.md)
+[![Ola Maps & MapLibre](https://img.shields.io/badge/Maps-Ola%20Maps%20%2B%20MapLibre-396CB9?logo=maplibre&logoColor=white)](docs/TECH_STACK.md)
+[![Swagger OpenAPI](https://img.shields.io/badge/API%20Docs-Swagger%20%2F%20OpenAPI-85EA2D?logo=swagger&logoColor=black)](docs/API_DOCUMENTATION.md)
+[![Docker Compose](https://img.shields.io/badge/Containers-Docker%20Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![GitHub Actions CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-<p align="center">
-  <b>A full-stack, enterprise-grade civic technology system engineered to eliminate municipal bottlenecks.</b><br/>
-  Empowering citizens to report civic issues with spatial coordinates, providing field officers with turn-by-turn routing, and equipping municipal administrators with automated SLA tracking and real-time operational analytics.
-</p>
-
-[Architecture](docs/ARCHITECTURE.md) • [Database Structure & ERD](docs/DATABASE_STUCTURE.md) • [REST API Reference](docs/API_DOCUMENTATION.md) • [Features Guide](docs/FEATURES.md) • [Tech Stack & ADRs](docs/TECH_STACK.md) • [Quickstart Guide](docs/QUICKSTART.md)
-
-</div>
-
----
-
-## 💡 Executive Summary & The Problem
-
-Municipal grievance management in most cities suffers from critical architectural failures:
-1. **Opaque Resolution Timelines:** Citizens file complaints into a "black hole" with zero visibility into assignment, field progress, or status transitions.
-2. **Bandwidth & Storage Chokepoints:** Heavy multimedia uploads (pothole images, electrical faults) congest API backends and exhaust server memory.
-3. **Inefficient Field Operations:** Field officers lack turn-by-turn spatial navigation to incident sites and must rely on verbal directions.
-4. **Unenforced SLAs:** Overdue complaints linger without automated managerial escalation, leading to public dissatisfaction.
-
-**CivicTrack solves this end-to-end** by pairing a **Next.js 16 App Router** frontend with an **Express/MongoDB** real-time distributed backend. Built with a **monorepo architecture** and **shared Zod contracts**, it delivers instantaneous bidirectional WebSocket event streaming, direct-to-S3 pre-signed upload flows, automated SLA breach detection, and turn-by-turn map navigation.
+[Architecture](docs/ARCHITECTURE.md) • [Database Structure & ERD](docs/DATABASE_STRUCTURE.md) • [REST API Reference](docs/API_DOCUMENTATION.md) • [Features Guide](docs/FEATURES.md) • [Tech Stack & ADRs](docs/TECH_STACK.md) • [Quickstart Guide](docs/QUICKSTART.md) • [CI/CD Pipeline](docs/CI_CD_PIPELINE.md)
 
 ---
 
-## ⚡ Engineering Highlights (Why This Project Stands Out)
+## Overview
 
-### 1. 📦 Microservices-Ready Monorepo Architecture
-* Structured using **npm workspaces** with a dedicated `@civictrack/contracts` package.
-* **Shared Zod Validation Schemas:** Client-side forms, REST route inputs, and WebSocket payloads share single-source-of-truth schemas, preventing runtime type drift and duplicate validation logic.
-* Decoupled frontend (`apps/web`), backend API (`apps/server`), and configuration (`packages/config`).
+CivicTrack connects citizens, municipal administrators, and field officers across three role-specific portals backed by a modular Express + Socket.IO API and shared Zod contracts (`@civictrack/contracts`):
 
-### 2. 🔐 Dual-Identity Zero-Trust Security & Creator Data Isolation
-* **Citizens:** Authenticated via **Clerk OAuth2** (Google, Email) with seamless session management and cryptographic webhook verification via **Svix**.
-* **Municipal Staff (Officers & Admins):** Authenticated via a hardened **Custom JWT System** with SHA-256 hashed refresh tokens, device fingerprinting, and `HttpOnly`, `SameSite=Strict` cookies shielded against XSS and CSRF.
-* **Creator-Based Admin Isolation:** Each administrator only accesses, monitors, and operates on departments they personally created (`createdByAdminId`). Cross-admin inspection, modification, or officer assignment is rejected with `403 Forbidden`.
-* **Safe Field Officer Deletion:** Eliminates orphaned records by clearing active assignments (preserving historical complaint logs and transparency), revoking staff sessions, disconnecting WebSockets, and revoking pending invitations.
-* **Role-Based Access Control (RBAC):** Strict tier isolation across `CITIZEN`, `OFFICER`, and `ADMIN` routes.
-
-### 3. 🌐 Real-Time Bidirectional Event Streaming (Socket.IO)
-* **Persist-Before-Emit Pattern:** Database state updates are committed atomically to MongoDB *before* WebSocket events are emitted, guaranteeing that clients never receive phantom notifications.
-* **Scoped Room Taxonomy:** Targeted event routing across personal rooms (`user:{id}`), departmental channels (`department:{id}`), role broadcasts (`role:admin`), and issue threads (`complaint:{id}`).
-* **Network Resilience:** Implements client-side **sliding-window event deduplication** and automated **stale-state reconciliation** on WebSocket reconnection.
-
-### 4. 🗺️ Geospatial Intelligence & Field Navigation
-* Stored as native **WGS 84 GeoJSON Points** (`[longitude, latitude]`) powered by MongoDB **`2dsphere` spatial indexes**.
-* **Spatial Deduplication:** Automatically scans within a 50-meter radius to suppress duplicate submissions for the same civic category.
-* **Turn-by-Turn Field Routing:** Integrated with the **Ola Maps Web SDK v2** and **Ola Directions API**, delivering live GPS route rendering for municipal response crews.
-
-### 5. ☁️ Direct-to-Cloud Pre-Signed Upload Intent Pattern
-* Eliminates server file handling by generating time-limited **Amazon S3 Pre-signed PUT URLs**.
-* **Upload Intent Verification:** The API validates file size (<10MB) and MIME type (JPEG/PNG/WebP/PDF), marks the intent `PENDING`, and confirms successful direct upload before attaching it to a complaint record.
-
-### 6. ⏱️ Automated SLA Monitoring & Escalation Engine
-* Deterministic SLA resolution thresholds based on incident severity (`CRITICAL`: 12h, `HIGH`: 24h, `MEDIUM`: 48h, `LOW`: 72h).
-* Background cron monitors overdue incidents every 15 minutes, auto-generates audit trail records, and triggers managerial alerts across administrative dashboards.
+- **Public Spatial Explorer (`/map`)**: Interactive Ola Maps + MapLibre GL explorer (`2 km`–`100 km` radius, category/status filters, Show/Hide Closed toggle, distance sorting) consuming sanitized public allowlist DTOs (`GET /api/v1/complaints/nearby`).
+- **Citizen Portal (`/citizen/*`)**: Clerk-authenticated 4-step issue reporting wizard with Ola Maps pin selection and up to 5 JPEG/PNG/WebP images (`<=10MB`), live `ComplaintStatusTracker`, zoomable `EvidenceLightbox`, in-app notifications, and 1–5 star feedback (closing `RESOLVED` complaints).
+- **Field Officer Portal (`/officer/*`)**: Invite-only onboarding, dual **Assigned Directly to Me** / **Department Queue** views, resolution upload via S3 pre-signed PUT intents with multipart fallback, nearby duplicate inspection, and turn-by-turn **OfficerNavigation** HUD with optional Web Speech voice guidance.
+- **Admin Portal (`/admin/*`)**: Creator-isolated department and officer management, staff invitation lifecycle (`PENDING`/`ACCEPTED`/`REVOKED`), complaint review/verification/rejection/assignment/closure workflow, `250m` duplicate candidate scoring and non-destructive linking, analytics dashboard, and manual + 15-minute scheduled SLA breach scans.
 
 ---
 
-## 🏗️ High-Level System Architecture
+## System Architecture
 
 ```mermaid
 flowchart TB
-    subgraph PresentationTier["Presentation Tier (Next.js 16 App Router)"]
-        CitizenUI["Citizen Portal\n(Issue Reporting & Tracking)"]
-        OfficerUI["Field Officer Suite\n(Navigation & Proof of Work)"]
-        AdminUI["Command Center\n(Analytics, Staff & SLA Engine)"]
-    end
-
-    subgraph SecurityTier["Edge & Security Layer"]
-        RateLimit["Rate Limiting & Helmet Guard"]
-        CSRF["CSRF & Origin Protection"]
-        DualAuth["Dual Auth Guard\n(Clerk OAuth + Staff JWT)"]
-    end
-
-    subgraph CoreServicesTier["Backend Application Core (Node.js + Express)"]
-        RESTRouter["REST API Router (/api/v1)"]
-        SocketServer["Socket.IO Real-Time Server"]
-        WorkflowSM["Complaint Lifecycle State Machine"]
-        SlaEngine["Automated SLA Breach Engine"]
-        GeoEngine["Spatial Index & Proximity Engine"]
-    end
-
-    subgraph PersistenceTier["Database & Cloud Storage"]
-        MongoDB[("MongoDB Atlas\n(2dsphere Spatial & TTL Indexes)")]
-        S3Bucket[("Amazon S3\n(Encrypted Evidence Storage)")]
-    end
-
-    subgraph CloudEcosystem["External Cloud Ecosystem"]
-        ClerkSvc["Clerk Identity Provider"]
-        OlaMapsSvc["Ola Maps SDK & Directions API"]
-        SvixSvc["Svix Webhook Verification"]
-    end
-
-    %% Client traffic
-    CitizenUI --> DualAuth
-    OfficerUI --> DualAuth
-    AdminUI --> DualAuth
-    CitizenUI -.->|WSS / Real-time| SocketServer
-    OfficerUI -.->|WSS / Real-time| SocketServer
-    AdminUI -.->|WSS / Real-time| SocketServer
-
-    DualAuth --> RESTRouter
-    RESTRouter --> WorkflowSM
-    RESTRouter --> GeoEngine
-    RESTRouter -->|Pre-signed URLs| S3Bucket
-    RESTRouter -->|Directions Routing| OlaMapsSvc
-    RESTRouter -->|Verify Webhooks| SvixSvc
-    DualAuth -->|Token Verification| ClerkSvc
-
-    WorkflowSM --> MongoDB
-    GeoEngine --> MongoDB
-    SlaEngine --> MongoDB
-    WorkflowSM -.->|Persist-Before-Emit| SocketServer
-    SlaEngine -.->|Escalation Alerts| SocketServer
+    Browser["Next.js 16 Client (Public Map, Citizen, Officer, Admin)"] --> Web["@civictrack/web (Next.js App Router + src/proxy.ts + /api/v1 rewrites)"]
+    Web --> API["@civictrack/server (Express 4 + Helmet + Rate Limiters + Origin CSRF)"]
+    Browser <-->|"Socket.IO (10s dedupe)"| Socket["Socket.IO Server (user, role, dept, admin:notifications, complaint rooms)"]
+    API --> Mongo["MongoDB Atlas / MongoDB 7 (Mongoose 2dsphere + TTL)"]
+    API --> S3["AWS S3 (Pre-signed PUT 900s / GET 3600s + Direct Multipart)"]
+    API --> Clerk["Clerk + Svix Webhooks"]
+    API --> Ola["Ola Maps API (Geocoding & Directions)"]
 ```
 
-> 📖 **Deep Dive:** For detailed component sequences and lifecycle diagrams, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
----
-
-## 📊 Database Schema & ERD
-
-CivicTrack uses **11 highly optimized collections** with compound indexes, TTL garbage collection, and spatial indices:
+### Complaint Lifecycle
 
 ```mermaid
-erDiagram
-    User ||--o{ Complaint : "reports / assigned"
-    Department ||--o{ Complaint : "handles"
-    Department ||--o{ User : "employs"
-    Complaint ||--o{ ComplaintStatusHistory : "audit logs"
-    Complaint ||--o{ Assignment : "dispatches"
-    Complaint ||--o{ SlaEscalation : "breaches triggers"
-    Complaint ||--o{ UploadIntent : "attaches evidence"
-    User ||--o{ StaffSession : "authenticates"
-    User ||--o{ Notification : "receives"
-    Counter ||--|| Complaint : "generates CT-YYYY-NNNNNN"
+stateDiagram-v2
+    [*] --> SUBMITTED
+    SUBMITTED --> UNDER_REVIEW : "Admin review"
+    UNDER_REVIEW --> VERIFIED : "Admin verify"
+    UNDER_REVIEW --> REJECTED : "Admin reject"
+    VERIFIED --> ASSIGNED : "Admin assign"
+    VERIFIED --> CLOSED : "Admin close"
+    ASSIGNED --> ASSIGNED : "Admin reassign"
+    ASSIGNED --> IN_PROGRESS : "Officer/Admin start-work"
+    ASSIGNED --> CLOSED : "Admin close"
+    IN_PROGRESS --> RESOLVED : "Officer/Admin resolve"
+    IN_PROGRESS --> CLOSED : "Admin close"
+    RESOLVED --> CLOSED : "Admin close or Citizen feedback"
+    REJECTED --> [*]
+    CLOSED --> [*]
 ```
 
-> 📖 **Deep Dive:** Full collection schemas, indexing strategies, and TTL specifications are documented in [DATABASE_STUCTURE.md](docs/DATABASE_STUCTURE.md).
+> Full workflow details, room topology, and sequence diagrams live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Full schemas and indexes live in [docs/DATABASE_STRUCTURE.md](docs/DATABASE_STRUCTURE.md).
 
 ---
 
-## 🛠️ Technology Stack
+## Workspace Structure & Stack
 
-| Layer | Technologies | Justification & Purpose |
+| Workspace | Package | Stack & Purpose |
 | :--- | :--- | :--- |
-| **Frontend Framework** | **Next.js 16 (App Router), React 19** | Server-side rendering (SSR), optimized bundle sizes, and granular layout caching. |
-| **UI & Styling** | **Tailwind CSS, Lucide React** | Responsive, accessible, mobile-first design with dark/light theme tokens. |
-| **Backend Runtime** | **Node.js 24 LTS, Express 4.21** | High-throughput, non-blocking asynchronous event loop with strict TypeScript safety. |
-| **Shared Contracts** | **TypeScript 5.7, Zod 3.24** | End-to-end static and runtime validation across API boundaries. |
-| **Database & ODM** | **MongoDB Atlas, Mongoose 8.10** | Document database with native GeoJSON `2dsphere` spatial indexing and atomic transitions. |
-| **Real-time Engine** | **Socket.IO 4.8** | Low-latency bi-directional WebSocket communication with room-based multi-tenancy. |
-| **Geospatial & Maps** | **Ola Maps Web SDK v2, MapLibre GL** | High-performance vector tile rendering, dynamic clustering, and turn-by-turn routing. |
-| **Object Storage** | **Amazon Web Services (AWS) S3** | High-durability media storage leveraging time-limited pre-signed PUT/GET URLs. |
-| **Identity & Security** | **Clerk, Custom JWT, bcryptjs, Svix** | Hybrid OAuth2 authentication for citizens and hardened JWT cookies for municipal staff. |
-| **DevOps & CI/CD** | **Docker, GitHub Actions, GHCR** | Multi-stage image minimization, automated lint/typecheck gates, and container publishing. |
+| `apps/web` | `@civictrack/web` | Next.js `^16.4.6`, React `^19.0.0`, Tailwind CSS `^3.4.17` (light mode), `@clerk/nextjs ^7.10.7`, `olamaps-web-sdk ^1.4.0`, `maplibre-gl ^5.12.0`, `socket.io-client ^4.8.4`, `lucide-react ^0.475.0` |
+| `apps/server` | `@civictrack/server` | Express `^4.21.2`, Mongoose `^8.10.1`, Socket.IO `^4.8.4`, `@clerk/express ^2.1.96`, `jsonwebtoken ^9.0.3`, `bcryptjs ^3.0.3`, `svix ^2.11.0`, `@aws-sdk/* ^3.1175.0`, `multer ^2.5.0`, `helmet ^8.0.0`, `express-rate-limit ^8.7.5`, `swagger-ui-express ^5.0.1` |
+| `packages/contracts` | `@civictrack/contracts` | Shared Zod `^3.24.2` schemas, enums, DTOs, and Socket.IO event contracts |
+| `packages/config` | `@civictrack/config` | Workspace stub (`exit 0` scripts); shared strict TypeScript config resides in [`tsconfig.base.json`](tsconfig.base.json) |
 
 ---
 
-## 🚀 Key Capabilities
+## Getting Started
 
-### 📱 Citizen Experience
-* **Spatial Issue Reporting:** Report civic complaints with real-time GPS geolocation and landmark tagging.
-* **Direct Evidence Capture:** Securely upload up to 5 photos directly to Amazon S3.
-* **Live Status Timeline:** Track complaint progression through `SUBMITTED`, `REVIEWED`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, and `CLOSED`.
-* **Proximity Map Discovery:** Explore nearby community complaints on an interactive vector map.
-* **Citizen Feedback:** Rate municipal resolution quality with 1-5 star feedback and remarks.
+1. **Check Node.js (`>=24.0.0`), install dependencies, and build contracts:**
+   ```bash
+   npm install
+   npm run build --workspace=@civictrack/contracts
+   ```
+2. **Configure environment files** from [`apps/server/.env.example`](apps/server/.env.example) (`apps/server/.env`) and [`apps/web/.env.example`](apps/web/.env.example) (`apps/web/.env.local`):
+   - Server uses `ATLAS_URI`, `STAFF_JWT_ACCESS_SECRET` / `STAFF_JWT_REFRESH_SECRET` (`STAFF_JWT_ACCESS_EXPIRY` default `15m`, `STAFF_JWT_REFRESH_EXPIRY` default `7d`), `AWS_S3_BUCKET_NAME`, Clerk keys, and Ola Maps credentials.
+   - Web sets `NEXT_PUBLIC_API_URL` (default `http://localhost:4000/api/v1`; Socket.IO derives its host by stripping `/api/v1`) and `INTERNAL_API_URL` (set `http://localhost:4000` when running `apps/server` locally on port `4000`).
+3. **Sync indexes & seed sample staff/departments (`TRANS`, `SWM`):**
+   ```bash
+   npm run sync:indexes --workspace=@civictrack/server
+   npm run seed:staff --workspace=@civictrack/server
+   ```
+4. **Start development servers:**
+   ```bash
+   npm run dev:server   # Express + Socket.IO on http://localhost:4000
+   npm run dev:web      # Next.js App Router on http://localhost:3000
+   ```
+   Useful server URLs: `http://localhost:4000/health`, `http://localhost:4000/ready`, `http://localhost:4000/docs`, `http://localhost:4000/api/v1`.
 
-### 👷 Municipal Field Officer Suite
-* **Task Queue:** Filter assigned complaints by priority (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) and SLA due date.
-* **Turn-by-Turn Route Navigation:** One-tap navigation powered by Ola Maps Directions API guiding officers to incident coordinates.
-* **Proof of Resolution:** Upload field photos directly from the incident site as cryptographic proof of completed work.
-
-### 🏛️ Municipal Command Center (Admin)
-* **Real-time Analytics Dashboard:** Live metrics on SLA compliance rate, daily trends, department breakdown, and overdue issues.
-* **Automated & Manual Dispatch:** Assign complaints to relevant municipal departments (Roads, Electricity, Sanitation, Health) and specific officers.
-* **Audit Trail & Governance:** Complete immutable historical log of every status transition, timestamp, and actor ID.
-* **Staff Management:** Role-based staff registration, invitation tokens, and department assignment.
-
----
-
-## 💻 Getting Started
-
-### Prerequisites
-* **Node.js**: `v24.0.0` or higher
-* **npm**: `v10.0.0` or higher
-* **MongoDB**: A running MongoDB instance or MongoDB Atlas cluster URI
-* **AWS S3 Bucket**: For evidence storage (optional for local offline testing)
-* **Clerk Account**: For citizen authentication (optional for local offline testing)
-
-### 1. Clone & Install Dependencies
-```bash
-git clone https://github.com/alokprasad573/CivicTrack.git
-cd CivicTrack
-npm install
-```
-
-### 2. Configure Environment Variables
-Copy the template configuration files:
-```bash
-# Server Environment
-cp apps/server/.env.example apps/server/.env
-
-# Web Client Environment
-cp apps/web/.env.example apps/web/.env.local
-```
-
-Configure your credentials in `apps/server/.env`:
-```env
-PORT=4000
-DATABASE_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/civictrack
-STAFF_JWT_ACCESS_SECRET=your_32_character_minimum_access_secret_here!
-STAFF_JWT_REFRESH_SECRET=your_32_character_minimum_refresh_secret_here!
-AWS_REGION=ap-south-1
-AWS_S3_BUCKET=civictrack-evidence-bucket
-```
-
-### 3. Build & Compile Contracts
-Compile shared Zod contracts and types:
-```bash
-npm run build --workspace=@civictrack/contracts
-```
-
-### 4. Run Development Servers
-Start both the API server and Next.js frontend concurrently:
-```bash
-# In Terminal 1 (Backend API & WebSocket Server):
-npm run dev:server
-
-# In Terminal 2 (Next.js Frontend Application):
-npm run dev:web
-```
-
-* **Frontend Application:** `http://localhost:3000`
-* **Backend REST API:** `http://localhost:4000/api/v1`
-* **Interactive Swagger UI:** `http://localhost:4000/api/v1/docs`
-* **API Health Check:** `http://localhost:4000/api/v1/health`
+> Step-by-step configuration, Docker Compose (`docker compose up --build`), and seeding overrides are covered in [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 ---
 
-## 🧪 Testing & Quality Gates
+## Scripts & Testing
 
-CivicTrack maintains deterministic test coverage across security, real-time events, and domain logic:
-
-```bash
-# Run all monorepo typecheck gates
-npm run typecheck
-
-# Run linter across all workspaces
-npm run lint
-
-# Run full backend test suite (Auth, RBAC, SLA, S3, Maps, Socket.io, Security)
-npm test --workspace=@civictrack/server
-```
-
-### Focused Test Suites
-| Command | Test Focus |
+| Command | Scope & Behavior |
 | :--- | :--- |
-| `npm run test:auth` | Citizen Clerk OAuth & Webhook cryptographic signature checks |
-| `npm run test:staff-auth` | Municipal staff JWT authentication, refresh rotation & cookie security |
-| `npm run test:admin-register` | Administrator registration real name validation & persistence |
-| `npm run test:admin-scoped-data` | Multi-tenant creator data isolation, cross-admin rejection & empty state protection |
-| `npm run test:officers` | Safe field officer deletion, referential integrity & department code filtering |
-| `npm run test:complaints` | Complaint lifecycle state machine, transitions & reference number generation |
-| `npm run test:socket` | Socket.IO room isolation, dual-handshake auth, and deduplication |
-| `npm run test:maps` | Ola Maps geocoding, directions API, and spatial bounding boxes |
-| `npm run test:security` | CSRF origin protection, regex sanitization, rate limiting, and stack suppression |
+| `npm run build` | Builds workspace packages |
+| `npm run typecheck` | Typechecks workspaces (requires built `@civictrack/contracts`) |
+| `npm run lint` | Runs workspace lint scripts (`@civictrack/web` runs `tsc --noEmit`; `@civictrack/config` exits `0`) |
+| `npm test` | Runs all workspace test scripts (`15` deterministic server suites; contracts/web report placeholder exit `0`) |
+| `npm run test --workspace=@civictrack/server` | Runs the 15 deterministic backend test suites (`tsx`) |
+| `npm run test:integration:db --workspace=@civictrack/server` | MongoDB integration tests (`REQUIRE_TEST_DB=true`) |
+| `npm run test:storage:integration --workspace=@civictrack/server` | S3 integration tests (`CIVICTRACK_S3_INTEGRATION_TESTS=true`) |
+| `node scripts/test-endpoints.mjs` | Smoke-tests a running server on `127.0.0.1:4000` |
 
 ---
 
-## 🐳 Docker & Production Deployment
+## CI/CD & Containers
 
-CivicTrack includes multi-stage Dockerfiles optimized for lightweight production container images:
+- **CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):** Runs `quality-gate` (build contracts, typecheck, lint, `npm test` across 15 backend suites) and `build-gate` (production builds with CI API env defaults).
+- **CD ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)):** Publishes `server` and `web` Docker images to GHCR (`ghcr.io/<repo>/server`, `ghcr.io/<repo>/web`) and reads `PRODUCTION_API_URL` from `vars` or `secrets`.
+- **Docker Compose ([`docker-compose.yml`](docker-compose.yml)):** Orchestrates `mongodb` (`mongo:7-jammy`), `server`, and `web`.
 
-```bash
-# Build and run the entire stack locally with Docker Compose
-docker-compose up --build
-```
-
-### Continuous Integration & Deployment (CI/CD)
-* **GitHub Actions CI (`ci.yml`):** Runs on every push and pull request. Enforces static analysis, workspace typechecks, deterministic backend test suites, and Next.js build verification.
-* **GitHub Actions CD (`cd.yml`):** Automatically packages production container images, publishes them to **GitHub Container Registry (GHCR)** (`ghcr.io/alokprasad573/civictrack/server` & `web`), triggers cloud webhooks, and executes automated post-deploy live health checks.
+See [docs/CI_CD_PIPELINE.md](docs/CI_CD_PIPELINE.md) for details.
 
 ---
 
-## 📄 License & Attribution
+## License
 
-This project is open-sourced under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
-Developed with ❤️ by **Alok Prasad** for modern, transparent, and resilient municipal governance.
+The repository [`LICENSE`](LICENSE) file grants the **MIT License** (`Copyright (c) 2026 Alok Prasad`); note that root [`package.json`](package.json) metadata declares `"license": "ISC"`.

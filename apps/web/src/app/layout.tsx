@@ -9,7 +9,7 @@ const siteUrl =
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "CivicTrack — Smart Civic Complaint Management System",
+    default: "CivicTrack — Smart Civic Complaint Management Platform",
     template: "%s | CivicTrack",
   },
   description:

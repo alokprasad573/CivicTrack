@@ -1,85 +1,75 @@
-# CivicTrack Comprehensive Features Specification
+# CivicTrack — Features & Capabilities Guide
 
-CivicTrack bridges the communication gap between citizens and municipal authorities by transforming civic grievance management into a high-visibility, data-driven, and real-time operational workflow.
+> Verified against frontend pages/components in [`apps/web/src/`](../apps/web/src) and backend controllers/services in [`apps/server/src/modules/`](../apps/server/src/modules).
 
----
-
-## 1. Citizen Portal Features
-
-### 📍 1.1 Precision Geospatial Reporting
-* **Interactive Map Pinning:** Citizens can drop a pin on vector maps using the Ola Maps SDK / MapLibre GL engine or use device GPS geolocation to report exact incident coordinates.
-* **Reverse Geocoding:** Automatically translates GPS coordinates into standardized street names, postal codes, and municipal wards.
-* **Landmark Tagging:** Allows citizens to provide contextual landmarks (e.g. "Opposite Metro Pillar 140") to assist field workers.
-
-### 📸 1.2 Multi-Media Direct Evidence Upload
-* **Bandwidth-Optimized Uploads:** Evidence photos are uploaded directly to Amazon S3 via time-limited pre-signed PUT URLs, preventing file upload bottlenecks on the backend server.
-* **Integrity & Type Validation:** Enforces strict client and server validation on file formats (JPEG, PNG, WebP) and restricts sizes to under 10MB.
-* **Evidence Lightbox Viewer:** Integrated zoomable image lightbox viewer with EXIF metadata, timestamp, and MIME type inspection.
-
-### 🔄 1.3 Real-Time Status Tracking & Audit Logs
-* **Live Step-Tracker UI:** Visual step-progress bar representing every lifecycle stage: `Submitted` ➔ `Reviewed` ➔ `Assigned` ➔ `In Progress` ➔ `Resolved` ➔ `Closed`.
-* **Instantaneous Socket Updates:** When a status changes or an officer is assigned, the citizen’s UI updates immediately without needing to refresh the page.
-* **Chronological Audit History:** Displays timestamped transition history, remarks by municipal staff, and photographic proof of resolution.
-
-### ⭐ 1.4 Citizen Resolution Feedback
-* Once an incident is marked `RESOLVED`, the citizen can submit a 1 to 5-star rating and satisfaction review.
-* If unsatisfied, the citizen can reject the resolution with feedback, automatically returning the status to `IN_PROGRESS`.
-
-### 🔍 1.5 Community Proximity Map
-* Explores nearby civic issues on an interactive public map.
-* **Privacy Allowlist DTO:** All citizen PII (name, phone, email, internal officer assignments, and raw evidence keys) is strictly stripped from the public feed.
+**Related Docs:** [README](../README.md) • [Architecture](ARCHITECTURE.md) • [Database Structure](DATABASE_STRUCTURE.md) • [API Documentation](API_DOCUMENTATION.md) • [Tech Stack](TECH_STACK.md) • [Quickstart](QUICKSTART.md) • [CI/CD Pipeline](CI_CD_PIPELINE.md)
 
 ---
 
-## 2. Field Officer Experience
+## 1. Public & Spatial Discovery (`/`, `/map`)
 
-### 📋 2.1 Dedicated Task Management Queue
-* **Role-Scoped Task Feed:** Field officers view only the complaints explicitly assigned to them or their department.
-* **Urgency Indicators:** Color-coded priority badges (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) and visual warning indicators for complaints approaching SLA deadlines.
-
-### 🧭 2.2 Turn-by-Turn Field Navigation
-* **Live GPS Directions:** Directly integrated with Ola Maps Directions API, generating turn-by-turn navigation routes and distance estimates from the officer's current location to the incident site.
-* **Maneuver Instructions:** Displays step-by-step driving directions inside a mobile-friendly slide-over panel.
-
-### 🛠️ 2.3 Field Action Execution & Work Proof
-* **One-Tap "Start Work":** Changes status to `IN_PROGRESS` and notifies the citizen and supervisory dashboard in real time.
-* **Resolution Proof Upload:** Officers upload "after" photos directly from the field site to prove resolution before marking the ticket `RESOLVED`.
-* **Reassignment Requests:** Officers can request department reassignment if an issue belongs to a different utility (e.g. water leakage under an electric pole).
+- **Landing Page (`/`):** Entry portal linking to citizen sign-in/sign-up, public issue map, officer login/onboarding, and administrator login/registration.
+- **Public Spatial Map Explorer (`/map`):**
+  - Powered by Ola Maps Web SDK (`olamaps-web-sdk`) + MapLibre GL and backed by `GET /api/v1/complaints/nearby` (sanitized allowlist DTOs protecting citizen PII).
+  - Includes a **Location Finder** tab, adjustable scan radius (**2 km – 100 km**), status and category filters, a **Show/Hide Closed** toggle, and distance-based sorting.
 
 ---
 
-## 3. Municipal Command Center (Admin)
+## 2. Citizen Portal (`/citizen/*`)
 
-### 📊 3.1 Real-Time Analytics & Operational Intelligence
-* **Key Performance Indicators (KPIs):** Instant metrics for Total Complaints, Resolution Rate (%), Active SLA Compliance (%), and Overdue Tickets.
-* **14-Day Inflow vs. Resolution Trend:** Visual daily bar charts comparing complaints submitted against complaints closed.
-* **Department Performance Breakdown:** Tracks complaint volume, resolution rate, and overdue tickets across all municipal departments.
-* **Category & Severity Breakdown:** Donut and distribution matrices showing top reported civic issues.
+Authenticated via Clerk (`@clerk/nextjs`) at `/sign-in` and `/sign-up`:
 
-### 🏢 3.2 Department & Creator-Scoped Access Control
-* **Creator-Based Admin Isolation:** Each administrator only accesses, monitors, and manages departments they personally registered (`createdByAdminId`).
-* **Cross-Tenant Protection:** Cross-admin inspection, updates, or deletions are strictly rejected with HTTP 403 Forbidden.
-* **Auto-Scoped Analytics:** Operational KPI metrics and daily trends strictly isolate complaints and officers to departments belonging to the logged-in administrator.
-* Map departments to specific civic categories with automatic routing rules.
-
-### 👮 3.3 Staff Governance, Directory & Safe Deletion
-* **Role & Department Code Filtering:** Dedicated officer directory strictly filtering `role === OFFICER` and filtering by municipal `departmentCode`.
-* **Safe Officer Deletion:** Administrators can safely delete field officers within their departments. Automatically unlinks active complaints (preserving complaint history and audit logs for municipal transparency), revokes staff sessions, disconnects open WebSockets, and revokes pending invites.
-* **Cryptographic Invitations:** Admins generate secure invitation tokens with assigned departments and roles.
-* **Admin Real Name Registration:** Direct admin self-registration (`/admin/register`) requiring verified real names, eliminating generic placeholders.
-
-### ⏱️ 3.4 SLA Monitoring & Auto-Escalation Engine
-* Automated background workers periodically evaluate open complaints against severity-based SLA deadlines.
-* Overdue tickets trigger automated escalation records, audit notifications, and priority badges in administrative queues.
-* Manual SLA scan button allows immediate on-demand audits.
+- **4-Step Issue Reporting Wizard (`/citizen/report`):**
+  - Captures title (5–150 chars), description (20–2000 chars), complaint category (`ROADS_POTHOLES`, `WATER_SUPPLY`, `GARBAGE_SANITATION`, `DRAINAGE_SEWAGE`, `STREETLIGHTS`, `ELECTRICITY`, `GENERAL`), street address, optional landmark, and map coordinates using an interactive Ola Maps `LocationPicker`.
+  - Attaches up to **5 images** (`image/jpeg`, `image/png`, `image/webp`, max `10MB` each) via direct multipart upload (`POST /api/v1/complaints`).
+  - Automatically calculates an SLA deadline (`dueAt`) on submission.
+- **Citizen Dashboard (`/citizen`):**
+  - Personal complaint counts/KPIs, live complaint list updated via Socket.IO, and an embedded `SpatialMapPreview` map.
+- **Complaint Tracking & Detail (`/citizen/complaints/[id]`):**
+  - Displays `ComplaintStatusTracker`, chronological `ComplaintStatusHistory` audit timeline, assigned department/officer info (when assigned), and resolution evidence.
+  - **Evidence Lightbox (`evidence-lightbox.tsx`):** Zoomable viewer displaying image preview, MIME type, file size, and upload timestamp.
+  - **Citizen Feedback (`POST /api/v1/complaints/:id/feedback`):** Available once a complaint reaches `RESOLVED` or `CLOSED` (1–5 star rating + optional comment). Submitting feedback on a `RESOLVED` complaint transitions its status to `CLOSED`.
+- **Notifications (`/notifications` & `NotificationBell`):** Real-time toast/badge alerts via Socket.IO (`notification:new`) and persistent notification inbox with single/bulk read actions.
 
 ---
 
-## 4. Platform & Engineering Capabilities
+## 3. Field Officer Portal (`/officer/*`)
 
-* **Monorepo Architecture:** npm workspaces with shared contracts package (`@civictrack/contracts`).
-* **Dual Authentication:** Clerk OAuth2 for public citizens + Secure Custom JWT with HttpOnly cookies for municipal staff.
-* **Socket.IO Real-time Engine:** Room taxonomy (`user:*`, `role:*`, `department:*`, `complaint:*`) with deduplication and reconnect reconciliation.
-* **Geospatial 2dsphere Indexing:** Sub-millisecond geographic proximity queries, nearby issue discovery, and duplicate suppression within a 50m radius. Automatically synchronized and verified across database connections.
-* **Cloud-Native Storage:** Direct S3 pre-signed upload flow with temporary access keys.
-* **Automated CI/CD:** GitHub Actions test, lint, typecheck gates, and multi-stage Docker container publishing to GHCR.
+Authenticated via staff invitation onboarding and HTTP-only JWT cookies:
+
+- **Invite-Only Onboarding (`/officer/register`) & Login (`/officer/login`):**
+  - Officers join using a verified invitation token (`GET /api/v1/staff/invitations/verify`, `POST /api/v1/staff/invitations/accept` or `/api/v1/officer/auth/register`) bound to a department.
+- **Officer Operations Queue (`/officer`):**
+  - Dedicated **"Assigned Directly to Me"** vs **"Department Queue"** tabs (`assignedToMe` query parameter), filtering, and live Socket.IO synchronization.
+- **Field Execution & Resolution (`/officer/complaints/[id]`):**
+  - Transition assigned work to active work (`Start Work`: `ASSIGNED -> IN_PROGRESS`).
+  - Resolve complaints (`Resolve` modal: `IN_PROGRESS -> RESOLVED`) with `resolutionRemarks` and up to 5 resolution photos (requests S3 pre-signed PUT upload intents via `POST /api/v1/storage/upload-intent` with automatic multipart upload fallback).
+  - Inspect nearby duplicate candidates (`GET /api/v1/duplicates/:id/candidates`) within the officer's department.
+- **Turn-by-Turn In-App Navigation (`OfficerNavigation`):**
+  - Embedded routing HUD backed by `POST /api/v1/maps/directions`, rendering route polylines, step-by-step instruction drawer, optional **Web Speech API** voice announcement toggle, and external Google Maps deep link.
+
+---
+
+## 4. Administrator Portal (`/admin/*`)
+
+Authenticated via HTTP-only admin JWT cookies with self-service registration (`/admin/register`) and login (`/admin/login`):
+
+- **Triage & Spatial Operations Dashboard (`/admin`):**
+  - Creator-scoped operational dashboard pairing filtered complaint queues with an interactive map (`MapMarkerLayer` clustering markers when zoom `< 14` and count `> 5`, plus Show/Hide Closed toggle).
+- **Workflow Orchestration & Duplicate Linking (`/admin/complaints/[id]`):**
+  - Review incoming complaints (`POST /:id/review`), verify (`POST /:id/verify`), reject with reason (`POST /:id/reject`), assign or reassign departments and officers (`POST /:id/assign`), and close complaints (`POST /:id/close`).
+  - Inspect geospatial/textual duplicate candidates within **`250m`** (`GET /api/v1/duplicates/:id/candidates`) and create non-destructive duplicate links (`POST /api/v1/duplicates/:id/link`).
+- **Department Management (`/admin/departments`):**
+  - Create, inspect, edit, and soft-deactivate (`isActive: false`) municipal departments isolated per creating administrator (`createdByAdminId`).
+- **Officer & Invitation Management (`/admin/officers`):**
+  - Filter active officers by department, generate and revoke time-limited invitation links/tokens (`/api/v1/admin/invitations`), and remove officer accounts (`DELETE /api/v1/users/officers/:id`).
+- **Analytics & SLA Oversight (`/admin/analytics`):**
+  - Visualizes complaint volume, status/category distributions, resolution timing, and SLA breach metrics (`GET /api/v1/analytics/summary`), with optional date range & department filters plus manual SLA scan execution (`POST /api/v1/sla/scan`).
+
+---
+
+## 5. Cross-Cutting Platform Capabilities
+
+- **Automated SLA Monitoring:** Background scanner runs every `15` minutes across overdue open complaints (up to `500` per scan), logging idempotent `SlaEscalation` rows and dispatching `SLA_BREACH` notifications to active admins and assigned officers.
+- **Media Validation & Short-Lived Access:** Magic-byte verification enforcing JPEG/PNG/WebP images (`<=10MB`, `<=5` files), pre-signed S3 PUT URLs (`900s` TTL), pre-signed GET view URLs (`3600s` TTL), and admin orphan cleanup (`POST /api/v1/storage/cleanup`).
+- **Interactive API Docs & Health Probes:** Built-in Swagger UI (`/docs`, `/api/v1/docs`) and liveness/readiness probes (`/health`, `/ready`).

@@ -1,300 +1,324 @@
-# CivicTrack Database Architecture & Schema Specification
+# CivicTrack — Database Structure & Schema Reference
 
-CivicTrack utilizes **MongoDB Atlas** as its primary persistent operational datastore, engineered through **Mongoose** with strict TypeScript schemas, atomic sequence counters, compound querying indexes, TTL auto-expirations, and a dedicated GeoJSON `2dsphere` spatial indexing engine.
+> Persistence layer documentation aligned with Mongoose models in [`apps/server/src/modules/`](../apps/server/src/modules) and shared contracts in [`packages/contracts/src/`](../packages/contracts/src).
+
+**Related Docs:** [README](../README.md) • [Architecture](ARCHITECTURE.md) • [API Documentation](API_DOCUMENTATION.md) • [Features](FEATURES.md) • [Tech Stack](TECH_STACK.md) • [Quickstart](QUICKSTART.md) • [CI/CD Pipeline](CI_CD_PIPELINE.md)
 
 ---
 
-## 1. High-Level Entity-Relationship Diagram (ERD)
+## 1. Overview
+
+CivicTrack persists application state in **MongoDB** (MongoDB Atlas in production; `mongo:7-jammy` in Docker Compose for local development) via **Mongoose `^8.10.1`**. Connection URI configuration uses `ATLAS_URI` (see [Quickstart](QUICKSTART.md#3-environment-variables)).
+
+### Core Collections / Models (11)
+
+| Model | Module Path | Purpose |
+| :--- | :--- | :--- |
+| `User` | `apps/server/src/modules/users/user.model.ts` | Citizens (Clerk-backed), Officers, and Administrators |
+| `Department` | `apps/server/src/modules/departments/department.model.ts` | Creator-scoped municipal departments and handled categories |
+| `Complaint` | `apps/server/src/modules/complaints/complaint.model.ts` | Core civic grievance records with GeoJSON Point & evidence |
+| `ComplaintStatusHistory` | `apps/server/src/modules/complaints/complaint-history.model.ts` | Append-only status transition audit log |
+| `Assignment` | `apps/server/src/modules/complaints/assignment.model.ts` | Assignment history schema (defined in codebase; see note below) |
+| `Counter` | `apps/server/src/modules/complaints/counter.model.ts` | Atomic yearly sequence counter for `CT-YYYY-NNNNNN` IDs |
+| `StaffSession` | `apps/server/src/modules/staff-auth/staff-session.model.ts` | Hashed staff refresh-token sessions with MongoDB TTL expiration |
+| `StaffInvitation` | `apps/server/src/modules/staff-auth/staff-invitation.model.ts` | Invite tokens for onboarding Officers (and staff registration checks) |
+| `UploadIntent` | `apps/server/src/modules/storage/upload-intent.model.ts` | Pre-signed S3 upload tracking (`PENDING`, `ATTACHED`, `EXPIRED`) |
+| `SlaEscalation` | `apps/server/src/modules/sla/sla-escalation.model.ts` | Idempotent SLA breach records (`{ complaintId, dueAt }` unique) |
+| `Notification` | `apps/server/src/modules/notifications/notification.model.ts` | In-app notifications per recipient |
+
+---
+
+## 2. Entity-Relationship Diagram
 
 ```mermaid
 erDiagram
-    User ||--o{ Complaint : "files (citizen)"
-    User ||--o{ Complaint : "assigned to (officer)"
-    User ||--o{ StaffSession : "authenticates (staff)"
-    User ||--o{ Notification : "receives"
-    User ||--o{ UploadIntent : "creates"
-    User ||--o{ Department : "creates (admin)"
-    Department ||--o{ User : "employs (officers)"
-    Department ||--o{ Complaint : "routed to"
-    Complaint ||--o{ ComplaintStatusHistory : "audit logs"
-    Complaint ||--o{ SlaEscalation : "breaches triggers"
-    Complaint ||--o{ Assignment : "dispatches"
-    Complaint ||--o{ UploadIntent : "attaches evidence"
-    Counter ||--|| Complaint : "atomically generates CT-YYYY-NNNNNN"
+    User ||--o{ Department : "creates (createdByAdminId)"
+    Department ||--o{ User : "employs OFFICERS (departmentId)"
+    User ||--o{ StaffSession : "holds (userId)"
+    User ||--o{ StaffInvitation : "invites (invitedBy) / accepts (acceptedBy)"
+    Department ||--o{ StaffInvitation : "targets (departmentId)"
 
-    User {
-        ObjectId _id PK
-        string clerkUserId UK "Sparse index for citizen OAuth"
-        string email UK "Indexed, unique, lowercase"
-        string passwordHash "Omitted from default queries"
-        string name "Max 120 chars (real name required)"
-        string role "CITIZEN | OFFICER | ADMIN"
-        ObjectId departmentId FK "Nullable for citizens/superadmins"
-        boolean isActive "Default true"
-        Date createdAt
-        Date updatedAt
-    }
+    User ||--o{ Complaint : "submits (citizenId)"
+    User ||--o{ Complaint : "assigned to (assignedOfficerId)"
+    Department ||--o{ Complaint : "routed to (departmentId)"
+    Complaint o|--o| Complaint : "duplicateOf (non-destructive link)"
 
-    Department {
-        ObjectId _id PK
-        string name "Max 120 chars"
-        string code UK "Uppercase, 2-20 chars"
-        string[] categories "Handled complaint categories"
-        ObjectId createdByAdminId FK "Admin creator reference for isolation"
-        boolean isActive "Default true"
-        Date createdAt
-        Date updatedAt
-    }
+    Complaint ||--o{ ComplaintStatusHistory : "logs transitions (complaintId)"
+    User ||--o{ ComplaintStatusHistory : "acts as (actorId)"
 
-    Complaint {
-        ObjectId _id PK
-        string referenceNumber UK "Format: CT-YYYY-NNNNNN"
-        ObjectId citizenId FK "Indexed"
-        string title "5-150 chars"
-        string description "20-2000 chars"
-        string category "Indexed"
-        string status "SUBMITTED..CLOSED"
-        string priority "LOW | MEDIUM | HIGH | CRITICAL"
-        GeoJSON location "2dsphere indexed [lng, lat]"
-        string address "Max 300 chars"
-        string landmark "Max 150 chars"
-        EvidenceItem[] evidence "Array of uploaded objects"
-        ObjectId departmentId FK "Indexed"
-        ObjectId assignedOfficerId FK "Indexed"
-        Date dueAt "SLA resolution deadline"
-        Date resolvedAt "Nullable"
-        Date closedAt "Nullable"
-        string rejectionReason "Max 500 chars"
-        string resolutionRemarks "Max 1000 chars"
-        EvidenceItem[] resolutionEvidence "Proof photos"
-        number feedbackRating "1 to 5"
-        string feedbackComment "Max 1000 chars"
-        Date feedbackSubmittedAt
-        ObjectId duplicateOf FK "Nullable"
-        boolean isDuplicate "Default false"
-        Date createdAt
-        Date updatedAt
-    }
+    Complaint ||--o{ Assignment : "assignment schema (complaintId)"
+    Department ||--o{ Assignment : "departmentId"
+    User ||--o{ Assignment : "officerId / assignedBy"
 
-    ComplaintStatusHistory {
-        ObjectId _id PK
-        ObjectId complaintId FK "Indexed"
-        string fromStatus "Nullable for initial"
-        string toStatus "Strict enum"
-        ObjectId actorId FK "User who triggered"
-        string remarks "Audit transition notes"
-        EvidenceItem[] evidence "Photos attached to state"
-        Date createdAt
-    }
+    Complaint ||--o{ UploadIntent : "links evidence (complaintId)"
+    User ||--o{ UploadIntent : "requests upload (userId)"
 
-    Assignment {
-        ObjectId _id PK
-        ObjectId complaintId FK "Indexed"
-        ObjectId departmentId FK
-        ObjectId assignedOfficerId FK
-        ObjectId assignedById FK "Admin user"
-        string notes "Dispatch remarks"
-        Date assignedAt
-        Date completedAt "Nullable"
-    }
-
-    StaffSession {
-        ObjectId _id PK
-        ObjectId userId FK "Indexed"
-        string role "ADMIN | OFFICER"
-        string refreshTokenHash "SHA-256 indexed hash"
-        string userAgent "Device fingerprint"
-        string ipAddress "Audit IP"
-        Date expiresAt "TTL Indexed (expires: 0)"
-        boolean isRevoked "Default false"
-        Date revokedAt
-        Date createdAt
-        Date updatedAt
-    }
-
-    StaffInvitation {
-        ObjectId _id PK
-        string email UK "Lowercase, indexed"
-        string role "ADMIN | OFFICER"
-        ObjectId departmentId FK "Nullable for admins"
-        string tokenHash UK "Cryptographic invite token"
-        Date expiresAt "TTL Indexed (expires: 0)"
-        ObjectId invitedBy FK "Admin user"
-        boolean isAccepted "Default false"
-        Date acceptedAt
-        Date createdAt
-    }
-
-    UploadIntent {
-        ObjectId _id PK
-        string objectKey UK "S3 Object Key"
-        ObjectId userId FK "Uploader"
-        string contentType "Allowed MIME types"
-        number size "Bytes max 10MB"
-        string checksum "Optional integrity hash"
-        string status "PENDING | ATTACHED | EXPIRED"
-        ObjectId complaintId FK "Nullable until attached"
-        Date expiresAt "TTL Indexed (expires: 0)"
-        Date createdAt
-        Date updatedAt
-    }
-
-    SlaEscalation {
-        ObjectId _id PK
-        ObjectId complaintId FK "Indexed"
-        Date dueAt "Original resolution deadline"
-        Date escalatedAt "Timestamp of breach scan"
-        number delayHours "Elapsed overdue duration"
-        boolean isResolved "Default false, indexed"
-        Date resolvedAt "Nullable"
-        number notifiedAdminsCount "Notification dispatch counter"
-        Date createdAt
-        Date updatedAt
-    }
-
-    Notification {
-        ObjectId _id PK
-        ObjectId recipientId FK "Indexed"
-        string type "STATUS_CHANGE | ASSIGNMENT | SLA_BREACH"
-        string title "Max 200 chars"
-        string message "Max 1000 chars"
-        string resourceType "COMPLAINT | ASSIGNMENT | SYSTEM"
-        string resourceId "Target entity ID"
-        Date readAt "Nullable"
-        Date createdAt
-        Date updatedAt
-    }
-
-    Counter {
-        string _id PK "e.g. complaint_seq_2026"
-        number seq "Atomic sequence value"
-    }
+    Complaint ||--o{ SlaEscalation : "breach tracking (complaintId)"
+    User ||--o{ Notification : "receives (recipientId)"
 ```
 
+> **Note:** `Counter` operates independently using string `_id` keys (e.g., `complaint_seq_2026`) to mint monotonic complaint reference numbers (`CT-YYYY-NNNNNN`).
+
 ---
 
-## 2. Detailed Collection Specifications
+## 3. Collection & Schema Details
 
-### 2.1 `complaints` Collection
-The core operational document representing a civic issue reported by a citizen.
+All schema options disable Mongoose `__v` (`versionKey: false`) on the core domain models documented below.
 
-* **Primary Key:** `_id` (ObjectId)
-* **Spatial System:** GeoJSON Point `[longitude, latitude]` obeying WGS 84 conventions.
-* **Indexes:**
-  ```javascript
-  // 1. Geospatial 2dsphere index for proximity lookup & duplicate detection
-  // Verified and automatically synchronized on database connect (and via `npm run sync:indexes`)
-  { location: "2dsphere" }
+### 3.1 `User` (`user.model.ts`)
 
-  // 2. Citizen complaint history timeline (descending)
-  { citizenId: 1, createdAt: -1 }
+Represents citizens provisioned through Clerk (`clerkUserId`) as well as password-authenticated staff accounts (`ADMIN` and `OFFICER`).
 
-  // 3. Workflow stage and global dashboard ordering
-  { status: 1, createdAt: -1 }
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `clerkUserId` | `String`, unique, sparse | Yes |
+| `email` | `String`, unique, lowercase | Yes |
+| `passwordHash` | `String`, `select: false` | — |
+| `name` | `String`, max length `120` | — |
+| `role` | Enum: `CITIZEN` \| `OFFICER` \| `ADMIN` | Yes |
+| `departmentId` | `ObjectId` ref `Department` | Yes |
+| `isActive` | `Boolean`, default `true` | Yes |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
 
-  // 4. Department routing and prioritization
-  { departmentId: 1, status: 1, priority: 1 }
+**Compound Indexes:**
+- `{ role: 1, isActive: 1 }`
+- `{ departmentId: 1, role: 1 }`
 
-  // 5. Field officer task workload
-  { assignedOfficerId: 1, status: 1 }
+---
 
-  // 6. Unique reference number lookup
-  { referenceNumber: 1 }, { unique: true }
+### 3.2 `Department` (`department.model.ts`)
+
+Municipal service departments scoped by the creating administrator (`createdByAdminId`) for tenant/administrator isolation.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `name` | `String`, max length `120` | — |
+| `code` | `String`, unique, uppercase, max length `20` | Unique |
+| `categories` | Array of `ComplaintCategory` enum values | — |
+| `createdByAdminId` | `ObjectId` ref `User` | Yes |
+| `isActive` | `Boolean` | Yes |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Compound Index:**
+- `{ createdByAdminId: 1, isActive: 1 }`
+
+---
+
+### 3.3 `Complaint` (`complaint.model.ts`)
+
+Stores civic grievance submissions, geospatial coordinates (`[lng, lat]`), assignment metadata, SLA deadline (`dueAt`), resolution details, and citizen feedback.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `referenceNumber` | `String`, unique (format `CT-YYYY-NNNNNN`) | Unique |
+| `citizenId` | `ObjectId` ref `User` | Yes |
+| `title` | `String`, length `5`–`150` | — |
+| `description` | `String`, length `20`–`2000` | — |
+| `category` | Enum (`ComplaintCategory`) | Yes |
+| `status` | Enum (`ComplaintStatus`) | Yes |
+| `priority` | Enum (`LOW` \| `MEDIUM` \| `HIGH` \| `CRITICAL`) | Yes |
+| `location` | GeoJSON `Point` (`coordinates: [lng, lat]`) | `2dsphere` |
+| `address` | `String`, max length `300` | — |
+| `landmark` | `String`, max length `150` | — |
+| `evidence` | `EvidenceItem[]` (object keys & metadata; view URLs generated on read) | — |
+| `departmentId` | `ObjectId` ref `Department` | Yes |
+| `assignedOfficerId` | `ObjectId` ref `User` | Yes |
+| `dueAt` | `Date` (computed SLA deadline) | — |
+| `resolvedAt` | `Date` | — |
+| `closedAt` | `Date` | — |
+| `rejectionReason` | `String`, max length `500` | — |
+| `resolutionRemarks` | `String`, max length `1000` | — |
+| `resolutionEvidence` | `EvidenceItem[]` | — |
+| `feedbackRating` | `Number`, range `1`–`5` | — |
+| `feedbackComment` | `String`, max length `1000` | — |
+| `feedbackSubmittedAt` | `Date` | — |
+| `duplicateOf` | `ObjectId` ref `Complaint` | Yes |
+| `isDuplicate` | `Boolean`, default `false` | Yes |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Geospatial & Compound Indexes:**
+- `{ location: "2dsphere" }`
+- `{ citizenId: 1, createdAt: -1 }`
+- `{ status: 1, createdAt: -1 }`
+- `{ departmentId: 1, status: 1, priority: 1 }`
+- `{ departmentId: 1, createdAt: -1 }`
+- `{ assignedOfficerId: 1, status: 1 }`
+
+---
+
+### 3.4 `ComplaintStatusHistory` (`complaint-history.model.ts`)
+
+Immutable audit trail recording workflow status transitions, acting user, remarks, and supporting evidence.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `complaintId` | `ObjectId` ref `Complaint` | Yes |
+| `fromStatus` | `ComplaintStatus` | — |
+| `toStatus` | `ComplaintStatus` | — |
+| `actorId` | `ObjectId` ref `User` | Yes |
+| `remarks` | `String`, max length `1000` | — |
+| `evidence` | `EvidenceItem[]` | — |
+| `createdAt` | `Date` | Yes |
+
+**Compound Index:**
+- `{ complaintId: 1, createdAt: 1 }`
+
+---
+
+### 3.5 `Assignment` (`assignment.model.ts`)
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `complaintId` | `ObjectId` ref `Complaint` | Yes |
+| `departmentId` | `ObjectId` ref `Department` | Yes |
+| `officerId` | `ObjectId` ref `User` | Yes |
+| `assignedBy` | `ObjectId` ref `User` | — |
+| `remarks` | `String`, max length `500` | — |
+| `assignedAt` | `Date` | Yes |
+| `unassignedAt` | `Date` | — |
+
+**Compound Index:**
+- `{ complaintId: 1, assignedAt: -1 }`
+
+> **Implementation Note:** The `Assignment` Mongoose model and indexes are defined in `apps/server/src/modules/complaints/assignment.model.ts`, but current workflow services (`complaint-workflow.service.ts`) record assignment state directly on `Complaint` (`departmentId`, `assignedOfficerId`) and write audit entries to `ComplaintStatusHistory` without importing `Assignment`.
+
+---
+
+### 3.6 `Counter` (`counter.model.ts`)
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `_id` | `String` (e.g., `complaint_seq_2026`) | Primary `_id` |
+| `seq` | `Number` | — |
+
+Generates sequential `CT-YYYY-NNNNNN` complaint reference numbers using atomic increments, with a random 6-digit fallback if MongoDB is disconnected.
+
+---
+
+### 3.7 `StaffSession` (`staff-session.model.ts`)
+
+Tracks hashed refresh tokens for `ADMIN` and `OFFICER` cookie-based sessions.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `userId` | `ObjectId` ref `User` | Yes |
+| `role` | Staff role (`ADMIN` \| `OFFICER`) | — |
+| `refreshTokenHash` | `String` (not marked `unique` in Mongoose schema) | Yes |
+| `userAgent` | `String` | — |
+| `ipAddress` | `String` | — |
+| `expiresAt` | `Date` | **TTL Index** (`{ expires: 0 }`) |
+| `isRevoked` | `Boolean` | Yes |
+| `revokedAt` | `Date` | — |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Compound Index:**
+- `{ userId: 1, isRevoked: 1 }`
+
+---
+
+### 3.8 `StaffInvitation` (`staff-invitation.model.ts`)
+
+Stores cryptographic hashes of single-use staff onboarding invitations.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `email` | `String` (not marked `unique`) | Yes |
+| `role` | Staff role | Yes |
+| `departmentId` | `ObjectId` ref `Department` | Yes |
+| `tokenHash` | `String`, unique | Unique |
+| `status` | Enum: `PENDING` \| `ACCEPTED` \| `REVOKED` \| `EXPIRED` | Yes |
+| `invitedBy` | `ObjectId` ref `User` | — |
+| `expiresAt` | `Date` (**standard index, no MongoDB TTL auto-deletion**) | Yes |
+| `acceptedAt` | `Date` | — |
+| `acceptedBy` | `ObjectId` ref `User` | — |
+| `revokedAt` | `Date` | — |
+| `revokedBy` | `ObjectId` ref `User` | — |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Compound Indexes:**
+- `{ email: 1, status: 1 }`
+- `{ tokenHash: 1, status: 1 }`
+
+---
+
+### 3.9 `UploadIntent` (`upload-intent.model.ts`)
+
+Tracks S3 pre-signed PUT upload intents before and after attachment to a complaint or resolution.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `objectKey` | `String`, unique | Unique |
+| `userId` | `ObjectId` ref `User` | Yes |
+| `contentType` | `String` (`image/jpeg`, `image/png`, `image/webp`) | — |
+| `size` | `Number` | — |
+| `checksum` | `String` | — |
+| `status` | Enum: `PENDING` \| `ATTACHED` \| `EXPIRED` | Yes |
+| `complaintId` | `ObjectId` ref `Complaint` | Yes |
+| `expiresAt` | `Date`, required (**no MongoDB TTL auto-deletion**; stale records are handled via `POST /api/v1/storage/cleanup`) | — |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Compound Index:**
+- `{ status: 1, createdAt: 1 }`
+
+---
+
+### 3.10 `SlaEscalation` (`sla-escalation.model.ts`)
+
+Records SLA deadline breaches discovered by the periodic background scanner or manual admin scan.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `complaintId` | `ObjectId` ref `Complaint` | Yes |
+| `dueAt` | `Date` | — |
+| `escalatedAt` | `Date` | — |
+| `delayHours` | `Number` | — |
+| `isResolved` | `Boolean` | Yes |
+| `resolvedAt` | `Date` | — |
+| `notifiedAdminsCount` | `Number` | — |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Unique Compound Index:**
+- `{ complaintId: 1, dueAt: 1 }` — guarantees each breach per `(complaintId, dueAt)` window is escalated at most once.
+
+---
+
+### 3.11 `Notification` (`notification.model.ts`)
+
+Persists real-time user notifications triggered by complaint lifecycle transitions, assignments, and SLA breaches.
+
+| Field | Type / Constraints | Index |
+| :--- | :--- | :--- |
+| `recipientId` | `ObjectId` ref `User` | Yes |
+| `type` | Notification type (e.g., `SLA_BREACH`, status/assignment types) | — |
+| `title` | `String`, max length `200` | — |
+| `message` | `String`, max length `1000` | — |
+| `resourceType` | Enum: `COMPLAINT` \| `ASSIGNMENT` \| `SYSTEM` | — |
+| `resourceId` | `ObjectId` / `String` | — |
+| `readAt` | `Date` | — |
+| `createdAt`, `updatedAt` | Mongoose timestamps | — |
+
+**Compound Index:**
+- `{ recipientId: 1, readAt: 1, createdAt: -1 }`
+
+---
+
+## 4. Shared Domain Enums (`packages/contracts/src/enums.ts`)
+
+- **`ComplaintStatus`:** `SUBMITTED`, `UNDER_REVIEW`, `VERIFIED`, `REJECTED`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`
+- **`ComplaintCategory`:** `ROADS_POTHOLES`, `WATER_SUPPLY`, `GARBAGE_SANITATION`, `DRAINAGE_SEWAGE`, `STREETLIGHTS`, `ELECTRICITY`, `GENERAL`
+- **`ComplaintPriority`:** `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`
+- **`UserRole`:** `CITIZEN`, `OFFICER`, `ADMIN`
+
+---
+
+## 5. Index Synchronization & Operational Scripts
+
+- **Sync Mongoose Indexes:**
+  ```bash
+  npm run sync:indexes --workspace=@civictrack/server
   ```
-
----
-
-### 2.2 `users` Collection
-Manages identities for both public citizens (authenticated via Clerk OAuth) and municipal employees (officers, supervisors, admins).
-- **Administrator Real Name:** Requires real name validation (trimmed, non-empty, max 120 chars) upon `/admin/register`.
-- **Officer Safe Deletion:** Safely unlinks active complaint assignments, revokes staff sessions, and cancels pending invitations while preserving historical complaint records and audit history.
-
-* **Indexes:**
-  ```javascript
-  // Unique email index
-  { email: 1 }, { unique: true }
-
-  // Sparse index for external Clerk identity
-  { clerkUserId: 1 }, { unique: true, sparse: true }
-
-  // Role & Department assignment filter
-  { role: 1, departmentId: 1 }
-  ```
-
----
-
-### 2.3 `departments` Collection
-Manages municipal departments, category bindings, and creator-scoped access control.
-
-* **Creator Isolation:** Stores `createdByAdminId` (reference to `User`). Administrative queries, rosters, and metrics are strictly scoped to departments created by the authenticated administrator.
-* **Indexes:**
-  ```javascript
-  // Unique department code
-  { code: 1 }, { unique: true }
-
-  // Creator admin scoping & active filter
-  { createdByAdminId: 1, isActive: 1 }
-
-  // Active status index
-  { isActive: 1 }
-  ```
-
----
-
-### 2.4 `upload_intents` Collection
-Enforces **Pre-Signed Upload Security**. No evidence photo can be attached to a complaint unless a pre-signed intent was generated, verified for MIME type and file size, and attached before expiration.
-
-* **TTL Expiration:** Automatically garbage-collected if unused within 2 hours.
-* **Indexes:**
-  ```javascript
-  { objectKey: 1 }, { unique: true }
-  { userId: 1, status: 1 }
-  { expiresAt: 1 }, { expireAfterSeconds: 0 } // MongoDB TTL Index
-  ```
-
----
-
-### 2.4 `staff_sessions` Collection
-Manages long-lived refresh tokens and active hardware sessions for municipal officers and administrators.
-
-* **Security:** Refresh tokens are never stored plaintext; they are hashed with SHA-256 before insertion.
-* **TTL Expiration:** Automatically purged upon session expiration.
-* **Indexes:**
-  ```javascript
-  { refreshTokenHash: 1 }, { unique: true }
-  { userId: 1, isRevoked: 1 }
-  { expiresAt: 1 }, { expireAfterSeconds: 0 } // MongoDB TTL Index
-  ```
-
----
-
-### 2.5 `sla_escalations` Collection
-Tracks automated SLA breach records identified by the background cron worker.
-
-* **Indexes:**
-  ```javascript
-  { complaintId: 1 }
-  { isResolved: 1, delayHours: -1 }
-  ```
-
----
-
-### 2.6 `counters` Collection
-Provides **Atomic Reference Number Generation** via MongoDB's native `$inc` and `findOneAndUpdate(..., { upsert: true })`.
-
-* **Document Structure:**
-  ```json
-  {
-    "_id": "complaint_seq_2026",
-    "seq": 1042
-  }
-  ```
-* **Format Generated:** `CT-YYYY-NNNNNN` (e.g., `CT-2026-001042`).
-
----
-
-## 3. Data Integrity & Concurrency Controls
-
-1. **Atomic Lifecycle Transitions:** State updates are validated against `isValidStatusTransition()` in `@civictrack/contracts` before executing atomic Mongoose operations.
-2. **Persist-Before-Emit Pattern:** In real-time events, the MongoDB transaction or update is committed **before** emitting events across Socket.IO rooms. If the write fails, no ghost events are dispatched.
-3. **Optimistic Locking & Duplicate Suppression:** Spatial queries leverage spherical distance calculations (`$maxDistance` in meters) paired with category matching to prevent accidental double-reporting within a 50-meter radius.
+  Executes `apps/server/src/scripts/sync-indexes.ts` to align MongoDB collection indexes with Mongoose schema definitions.
+- **Database Seeding & Bootstrap Scripts** (in `apps/server/src/scripts/`):
+  - `npm run seed:staff --workspace=@civictrack/server` (`seed-staff.ts`): Seeds sample departments (`TRANS` and `SWM`) and initial staff users (supports `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_OFFICER_EMAIL`, `INITIAL_OFFICER_PASSWORD`).
+  - `create-invite.ts` (`npm run invite --workspace=@civictrack/server`): CLI helper for generating a staff invitation.
+  - `bootstrap-admin.ts` & `backfill-department-creators.ts`: Standalone operational TypeScript scripts in `apps/server/src/scripts/`.

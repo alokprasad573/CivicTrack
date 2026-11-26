@@ -1,331 +1,225 @@
-# CivicTrack REST API Specification (v1)
+# CivicTrack — REST API & Realtime Event Reference
 
-Base URL: `http://localhost:4000/api/v1` (Development) | `https://api.civictrack.gov/api/v1` (Production)
+> Verified against Express route definitions in [`apps/server/src/app.ts`](../apps/server/src/app.ts), module routers in `apps/server/src/modules/`, Zod contracts in [`packages/contracts/src/`](../packages/contracts/src), and [`apps/server/src/socket.ts`](../apps/server/src/socket.ts).
 
-All API responses follow a uniform envelope format:
-```json
-// Success Response
-{
-  "success": true,
-  "data": { ... },
-  "meta": { "page": 1, "total": 42 } // Optional pagination
-}
-
-// Error Response
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Title must be at least 5 characters",
-    "details": [ ... ]
-  },
-  "requestId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
-}
-```
+**Related Docs:** [README](../README.md) • [Architecture](ARCHITECTURE.md) • [Database Structure](DATABASE_STRUCTURE.md) • [Features](FEATURES.md) • [Tech Stack](TECH_STACK.md) • [Quickstart](QUICKSTART.md) • [CI/CD Pipeline](CI_CD_PIPELINE.md)
 
 ---
 
-## 1. Authentication & Security Edge
+## 1. Base URL, Mounting & Interactive Docs
 
-CivicTrack uses a **Dual Authentication Model**:
-1. **Citizens:** Authenticated via `Authorization: Bearer <clerk_session_jwt>`.
-2. **Municipal Staff:** Authenticated via HttpOnly cookies (`access_token`, `refresh_token`) or `Authorization: Bearer <staff_jwt_token>`.
-
-### Common Error Codes:
-* `400 VALIDATION_ERROR`: Invalid payload (Zod parsing error).
-* `401 UNAUTHORIZED`: Missing, expired, or invalid session token.
-* `403 FORBIDDEN`: Insufficient role permissions (`UserRole`).
-* `404 NOT_FOUND`: Resource does not exist.
-* `409 CONFLICT`: Duplicate resource (e.g. email or department code already registered).
-* `429 RATE_LIMIT_EXCEEDED`: Too many requests (Standard: 100 req/15m; Strict Auth: 5 req/15m).
+- **API Base Path:** `/api/v1` (in Next.js `apps/web`, client requests to `/api/v1/:path*` and `/docs/:path*` are proxied via `next.config.mjs` rewrites to `INTERNAL_API_URL`; see [Quickstart](QUICKSTART.md#3-environment-variables)).
+- **Dual Mount Paths:** Health, readiness, docs, webhooks, and core API routers are mounted at `/api/v1/*` and also at root paths (`/health`, `/ready`, `/docs`, `/webhooks/clerk`, `/users`, `/departments`, `/complaints`, `/storage`, `/maps`, `/duplicates`, `/sla`, `/analytics`, `/notifications`, `/admin/auth`, `/officer/auth`, `/staff/invitations`, `/admin/invitations`) in `apps/server/src/app.ts`.
+- **Interactive Swagger / OpenAPI:**
+  - `GET /docs/` and `GET /api/v1/docs/` — Swagger UI
+  - `GET /docs/openapi.json` and `GET /api/v1/docs/openapi.json` — OpenAPI JSON
+  - *Note:* `apps/server/src/docs/openapi.ts` documents a representative subset of routes and contains a few schema doc discrepancies (e.g., referencing `civictrack_staff_access` and `evidenceObjectKeys`) compared to the live Express routers documented below.
 
 ---
 
-## 2. Complaint Management (`/complaints`)
+## 2. Authentication, Cookies & Security Controls
 
-### 2.1 File a Complaint
-* **Endpoint:** `POST /api/v1/complaints`
-* **Auth:** Citizen (`CITIZEN`, `ADMIN`)
-* **Request Body:**
-```json
-{
-  "title": "Severe Pothole causing traffic backup",
-  "description": "Deep waterlogged pothole near the bus terminus causing accidents.",
-  "category": "ROADS_AND_BRIDGES",
-  "location": {
-    "type": "Point",
-    "coordinates": [77.5946, 12.9716]
-  },
-  "address": "12th Cross Road, Indira Nagar, Bengaluru",
-  "landmark": "Near Metro Pillar 42",
-  "evidence": [
-    {
-      "objectKey": "evidence/complaints/1740300000-pothole.jpg",
-      "contentType": "image/jpeg",
-      "size": 2451000
-    }
-  ]
-}
-```
-* **Response (`201 Created`):**
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "65e0a123456789abcdef0001",
-    "referenceNumber": "CT-2026-000142",
-    "status": "SUBMITTED",
-    "priority": "MEDIUM",
-    "title": "Severe Pothole causing traffic backup",
-    "createdAt": "2026-11-23T12:00:00.000Z"
-  }
-}
-```
+### Dual Authentication Model
+1. **Citizen Authentication (Clerk):** Verified via `@clerk/express` (`CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`). When `NODE_ENV !== "production"` and `ALLOW_TEST_TOKEN_AUTH === "true"`, test bearer tokens may be enabled for automated test environments.
+2. **Staff Authentication (`ADMIN` / `OFFICER`):** Custom JWT sessions delivered in HTTP-only cookies:
+   - Admin cookies: `civictrack_admin_token` (access), `civictrack_admin_refresh` (refresh)
+   - Officer cookies: `civictrack_officer_token` (access), `civictrack_officer_refresh` (refresh)
+   - Cookie flags (`staff-auth.controller.ts`): `httpOnly: true`, `secure: NODE_ENV === "production"`, `sameSite: "lax"`, `path: "/"`.
+   - Default token TTLs: Access `15m` (`STAFF_JWT_ACCESS_EXPIRY`), Refresh `7d` (`STAFF_JWT_REFRESH_EXPIRY`).
 
-### 2.2 List Complaints (Filtered & Paginated)
-* **Endpoint:** `GET /api/v1/complaints`
-* **Auth:** Authenticated User
-* **Query Parameters:**
-  * `page` (default `1`): Page number.
-  * `limit` (default `20`, max `100`): Results per page.
-  * `status` (optional): `SUBMITTED`, `REVIEWED`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`, `REJECTED`.
-  * `category` (optional): `ROADS_AND_BRIDGES`, `WATER_SUPPLY`, `ELECTRICITY`, `SANITATION`, etc.
-  * `priority` (optional): `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.
-  * `departmentId` (optional): Target municipal department.
-  * `search` (optional): Text search across title, reference number, or address.
-* **Response (`200 OK`):**
-```json
-{
-  "success": true,
-  "data": [ ... ],
-  "meta": { "total": 85, "page": 1, "limit": 20, "totalPages": 5 }
-}
-```
+### CSRF & Request Hardening (`app.ts`)
+- Mutating HTTP requests carrying staff authentication cookies (excluding webhooks) validate the `Origin` or `Referer` header against the configured allowed origin set and reject mismatched origins with `403` (`CSRF_DETECTED`). No custom `X-CSRF-Protection` header is used.
+- `helmet`, input sanitization middleware (`sanitize.middleware.ts`), and environment-gated rate limiters protect all routes.
 
-### 2.3 Discover Nearby Complaints (Public Map Discovery)
-* **Endpoint:** `GET /api/v1/complaints/nearby`
-* **Auth:** Public / Unauthenticated (PII Stripped)
-* **Query Parameters:**
-  * `lng` (required): Longitude (-180 to 180).
-  * `lat` (required): Latitude (-90 to 90).
-  * `radius` (optional, default `10000`): Search radius in meters (max 100km).
-  * `category` (optional): Filter by category.
-  * `includeClosed` (optional, default `false`): Include closed complaints.
-* **Response (`200 OK`):** Strips citizen identity, internal officer assignments, and private evidence keys.
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "65e0a123456789abcdef0001",
-      "referenceNumber": "CT-2026-000142",
-      "title": "Severe Pothole causing traffic backup",
-      "category": "ROADS_AND_BRIDGES",
-      "status": "IN_PROGRESS",
-      "priority": "HIGH",
-      "location": { "type": "Point", "coordinates": [77.5946, 12.9716] },
-      "address": "12th Cross Road, Bengaluru",
-      "createdAt": "2026-11-23T12:00:00.000Z"
-    }
-  ]
-}
-```
+### Rate Limits (`apps/server/src/common/middleware/rate-limit.middleware.ts`)
+Rate limiting is skipped when `NODE_ENV === "test"` unless `ENABLE_TEST_RATE_LIMIT === "true"`.
 
-### 2.4 Get Complaint Details
-* **Endpoint:** `GET /api/v1/complaints/:id`
-* **Auth:** Authenticated User
-* **Response (`200 OK`):** Returns complete complaint document, populated department and officer, full status audit history, and pre-signed view URLs for evidence photos.
+| Limiter | Window | Max Requests | Scope |
+| :--- | :--- | :--- | :--- |
+| General API limiter | 15 minutes | `300` | Global API routes |
+| `authWebhookRateLimiter` | 15 minutes | `60` | Auth, Clerk webhooks, and Maps endpoints |
+| `uploadIntentRateLimiter` | 15 minutes | `50` | Pre-signed upload intents and `POST /api/v1/complaints` |
 
-### 2.5 Workflow Transitions
-All transitions enforce the `isValidStatusTransition()` municipal state machine:
+---
 
-| Method | Endpoint | Allowed Roles | Request Payload | Target Status |
+## 3. System & Webhook Endpoints
+
+| Method | Path | Auth | Notes |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/health` (and `/api/v1/health`) | Public | Process liveness probe (`200`) |
+| `GET` | `/ready` (and `/api/v1/ready`) | Public | MongoDB readiness check (`200` when connected, `503` otherwise) |
+| `GET` | `/docs/`, `/docs/openapi.json` (and `/api/v1/docs/*`) | Public | Swagger UI and OpenAPI JSON |
+| `POST` | `/api/v1/webhooks/clerk` (and `/webhooks/clerk`) | Svix Signature | Handles `user.created`, `user.updated`, `user.deleted` (`authWebhookRateLimiter`) |
+
+---
+
+## 4. Staff Authentication & Invitation Endpoints
+
+### 4.1 Admin Authentication (`/api/v1/admin/auth`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/admin/auth/login` | Public (`authWebhookRateLimiter`) | Email/password login; sets `civictrack_admin_token` & `civictrack_admin_refresh` cookies |
+| `POST` | `/api/v1/admin/auth/register` | Public (`authWebhookRateLimiter`) | Direct Admin registration (`name`, `email`, `password`; bcrypt cost `12`) |
+| `POST` | `/api/v1/admin/auth/refresh` | Refresh Cookie | Rotates admin session tokens |
+| `POST` | `/api/v1/admin/auth/logout` | Cookie / Session | Revokes `StaffSession` and clears admin cookies |
+| `GET` | `/api/v1/admin/auth/me` | `ADMIN` | Returns current authenticated Admin profile |
+| `GET` | `/api/v1/admin/auth/verify-invite` | Public | Verifies invite token query |
+
+### 4.2 Officer Authentication (`/api/v1/officer/auth`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/officer/auth/login` | Public (`authWebhookRateLimiter`) | Email/password login; sets `civictrack_officer_token` & `civictrack_officer_refresh` cookies |
+| `POST` | `/api/v1/officer/auth/register` | Public (`authWebhookRateLimiter`) | Officer onboarding via invitation token (`StaffRegisterForm`) |
+| `POST` | `/api/v1/officer/auth/refresh` | Refresh Cookie | Rotates officer session tokens |
+| `POST` | `/api/v1/officer/auth/logout` | Cookie / Session | Revokes `StaffSession` and clears officer cookies |
+| `GET` | `/api/v1/officer/auth/me` | `OFFICER` | Returns current authenticated Officer profile |
+| `GET` | `/api/v1/officer/auth/verify-invite` | Public | Verifies officer invitation token |
+
+### 4.3 Staff Invitations (`/api/v1/staff/invitations` & `/api/v1/admin/invitations`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/staff/invitations/verify?token=...` | Public | Validates an invitation token (`PENDING` & unexpired) |
+| `POST` | `/api/v1/staff/invitations/accept` | Public | Accepts invitation with name/password, creates staff user, sets session cookies |
+| `POST` | `/api/v1/admin/invitations` | `ADMIN` | Creates an invitation for an officer (associated with department) |
+| `GET` | `/api/v1/admin/invitations` | `ADMIN` | Lists invitations scoped to the admin's scope |
+| `POST` | `/api/v1/admin/invitations/:id/revoke` | `ADMIN` | Marks a pending invitation as `REVOKED` |
+
+---
+
+## 5. Users & Departments
+
+### 5.1 Users (`/api/v1/users`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/users/me` | Authenticated | Current user profile |
+| `POST` | `/api/v1/users/me/switch-role` | Authenticated | Dev-only role switcher (enabled only when `NODE_ENV !== "production"` and `ENABLE_DEV_ROLE_SWITCH === "true"`) |
+| `GET` | `/api/v1/users` | `ADMIN`, `OFFICER` | Lists users (role/creator-scoped) |
+| `PATCH` | `/api/v1/users/:id/role` | `ADMIN` | Updates user role/department assignment |
+| `DELETE` | `/api/v1/users/officers/:id` | `ADMIN` | Deletes/deactivates an officer account safely |
+| `DELETE` | `/api/v1/users/:id` | `ADMIN` | Removes user account |
+
+### 5.2 Departments (`/api/v1/departments`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/departments` | Optional Auth | Lists departments (`ADMIN` requests are creator-scoped by `createdByAdminId`) |
+| `POST` | `/api/v1/departments` | `ADMIN` | Creates a new department owned by the creating Admin |
+| `GET` | `/api/v1/departments/:id` | `ADMIN` (creator) / assigned `OFFICER` | Fetches department details |
+| `PATCH` | `/api/v1/departments/:id` | `ADMIN` (creator) | Updates department properties/categories |
+| `DELETE` | `/api/v1/departments/:id` | `ADMIN` (creator) | Soft-deactivates department (`isActive = false`) |
+| `GET` | `/api/v1/departments/:id/officers` | `ADMIN` (creator) / same-dept `OFFICER` | Lists officers belonging to the department |
+
+---
+
+## 6. Complaints & Workflow Transitions (`/api/v1/complaints`)
+
+### 6.1 Discovery, Creation & Feedback
+
+| Method | Endpoint | Auth | Parameters / Request Details |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/complaints/nearby` | Public | Query: `lng`/`longitude`, `lat`/`latitude`, `radius`/`radiusMeters`, `category`, `status`, `includeClosed`, `limit`. Returns sanitized public allowlist DTOs. |
+| `POST` | `/api/v1/complaints` | Authenticated (`uploadIntentRateLimiter`) | Accepts **either** JSON (with pre-signed evidence object keys) **or** `multipart/form-data` (fields: `evidenceImages`, `images`, or `evidence`). Required fields include `title` (5–150), `description` (20–2000), `category`, `location` (`[lng, lat]`), `address`, optional `landmark`. Computes SLA `dueAt`. |
+| `GET` | `/api/v1/complaints` | Authenticated | Role/creator-scoped list. Query: `page`, `limit` (default `10`, max `100`), `status`, `category`, `priority`, `departmentId`, `search`, `assignedToMe`. |
+| `GET` | `/api/v1/complaints/:id` | Authenticated | Accepts MongoDB ObjectId or `referenceNumber` (`CT-YYYY-NNNNNN`). Populates fresh S3 pre-signed GET view URLs (`3600s` TTL). |
+| `POST` | `/api/v1/complaints/:id/feedback` | Complaint-owner `CITIZEN` | Allowed when status is `RESOLVED` or `CLOSED`. Accepts `feedbackRating` (`1`–`5`) and `feedbackComment`. Submitting feedback transitions a `RESOLVED` complaint directly to `CLOSED`. |
+
+### 6.2 Workflow Action Endpoints (All Actions Use `POST`)
+
+| Method | Endpoint | Allowed Role | Enforced Transition | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `PATCH` | `/complaints/:id/review` | `ADMIN`, `OFFICER` | `{ "remarks": "Reviewed by supervisor" }` | `REVIEWED` |
-| `PATCH` | `/complaints/:id/verify` | `ADMIN` | `{ "priority": "HIGH", "remarks": "Valid emergency" }` | `REVIEWED` |
-| `POST` | `/complaints/:id/assign` | `ADMIN` | `{ "departmentId": "...", "assignedOfficerId": "...", "priority": "HIGH", "dueAt": "..." }` | `ASSIGNED` |
-| `PATCH` | `/complaints/:id/start-work` | `OFFICER` | `{ "remarks": "Team dispatched with repair asphalt" }` | `IN_PROGRESS` |
-| `PATCH` | `/complaints/:id/resolve` | `OFFICER` | `{ "remarks": "Pothole filled and sealed", "evidence": [{ "objectKey": "..." }] }` | `RESOLVED` |
-| `PATCH` | `/complaints/:id/close` | `CITIZEN`, `ADMIN` | `{ "remarks": "Confirmed resolved on site" }` | `CLOSED` |
-| `PATCH` | `/complaints/:id/reject` | `ADMIN`, `OFFICER` | `{ "reason": "Private road, out of municipal jurisdiction" }` | `REJECTED` |
+| `POST` | `/api/v1/complaints/:id/review` | `ADMIN` | `SUBMITTED -> UNDER_REVIEW` | Moves new complaint into review |
+| `POST` | `/api/v1/complaints/:id/verify` | `ADMIN` | `UNDER_REVIEW -> VERIFIED` | Confirms complaint validity |
+| `POST` | `/api/v1/complaints/:id/reject` | `ADMIN` | `UNDER_REVIEW -> REJECTED` | Terminal rejection with `rejectionReason` |
+| `POST` | `/api/v1/complaints/:id/assign` | `ADMIN` | `VERIFIED -> ASSIGNED`, `ASSIGNED -> ASSIGNED` | Assigns or reassigns `departmentId` / `assignedOfficerId` |
+| `POST` | `/api/v1/complaints/:id/start-work` | `OFFICER`, `ADMIN` | `ASSIGNED -> IN_PROGRESS` | Field officer starts active work |
+| `POST` | `/api/v1/complaints/:id/resolve` | `OFFICER`, `ADMIN` | `IN_PROGRESS -> RESOLVED` | Accepts JSON or `multipart/form-data` (`resolutionImages`, `resolutionEvidence`, `images`) plus `resolutionRemarks`. Marks active `SlaEscalation` resolved. |
+| `POST` | `/api/v1/complaints/:id/close` | `ADMIN` | `VERIFIED` / `ASSIGNED` / `IN_PROGRESS` / `RESOLVED` -> `CLOSED` | Terminal administrative closure; marks active `SlaEscalation` resolved |
 
-### 2.6 Submit Citizen Feedback
-* **Endpoint:** `POST /api/v1/complaints/:id/feedback`
-* **Auth:** Complaint Owner (`CITIZEN`)
-* **Request Body:**
-```json
-{
-  "rating": 5,
-  "comment": "Repaired within 24 hours. Excellent response!"
-}
-```
+> **Frontend vs Backend Note:** `apps/web` also renders Verify controls on `SUBMITTED` complaints and Reassign controls on `IN_PROGRESS` complaints in the Admin complaint detail page, while `ComplaintWorkflowService` on the backend enforces `UNDER_REVIEW -> VERIFIED` and `VERIFIED | ASSIGNED -> ASSIGNED`.
 
 ---
 
-## 3. Storage & Evidence Uploads (`/storage`)
+## 7. Media Storage (`/api/v1/storage`)
 
-CivicTrack uses the **Pre-Signed Upload Intent Flow** to prevent large media uploads from blocking API server threads.
+Uploads accept **JPEG (`image/jpeg`), PNG (`image/png`), and WebP (`image/webp`) only** (validated with magic-byte inspection), up to **10 MB per file** and **5 files max**.
 
-### 3.1 Request Pre-Signed Upload Intent
-* **Endpoint:** `POST /api/v1/storage/upload-intent`
-* **Auth:** Authenticated User
-* **Request Body:**
-```json
-{
-  "contentType": "image/jpeg",
-  "size": 3145728,
-  "filename": "site_photo.jpg"
-}
-```
-* **Response (`201 Created`):**
-```json
-{
-  "success": true,
-  "data": {
-    "uploadUrl": "https://civictrack-bucket.s3.ap-south-1.amazonaws.com/evidence/65e...jpg?AWSAccessKeyId=...",
-    "objectKey": "evidence/complaints/65e0a123-site_photo.jpg",
-    "expiresAt": "2026-11-23T12:15:00.000Z"
-  }
-}
-```
-
-### 3.2 Get Pre-Signed Read URL
-* **Endpoint:** `GET /api/v1/storage/view-url?objectKey=evidence/...`
-* **Auth:** Authenticated User
-* **Response (`200 OK`):**
-```json
-{
-  "success": true,
-  "data": {
-    "viewUrl": "https://civictrack-bucket.s3.ap-south-1.amazonaws.com/evidence/...?signature=...",
-    "expiresIn": 900
-  }
-}
-```
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/storage/upload` | Authenticated | Direct multipart file upload handled via `multer.memoryStorage()` and uploaded to S3 |
+| `POST` | `/api/v1/storage/upload-intent` (alias `/upload-intents`) | Authenticated (`uploadIntentRateLimiter`) | Requests pre-signed S3 PUT URLs (`900s` / 15-min TTL). Body: `{ files: [{ filename, contentType, size, checksum? }], folder?, complaintId? }` |
+| `GET` | `/api/v1/storage/view-url?objectKey=...` | Authenticated | Generates a fresh S3 pre-signed GET URL (`3600s` / 1-hour TTL) |
+| `POST` | `/api/v1/storage/cleanup?olderThanHours=24` | `ADMIN` | Cleans up stale/orphaned `UploadIntent` records (`olderThanHours` defaults to `24`) |
 
 ---
 
-## 4. Municipal Staff Authentication & Session Management (`/staff/auth`, `/admin/auth`)
+## 8. Maps, Duplicates, SLA, Analytics & Notifications
 
-### 4.1 Administrator Direct Registration
-* **Endpoint:** `POST /api/v1/admin/auth/register`
-* **Request Body:**
-```json
-{
-  "name": "Jane Doe",
-  "email": "jane.doe@civictrack.gov",
-  "password": "SecurePassword123!",
-  "confirmPassword": "SecurePassword123!"
-}
-```
-* **Validation:** Real name required (trimmed, min 2 chars, max 120 chars, cannot be blank).
-* **Response (`201 Created`):** Sets `civictrack_admin_token` and `civictrack_admin_refresh` HttpOnly cookies and returns the provisioned administrator profile.
+### 8.1 Maps (`/api/v1/maps`)
+All maps endpoints use `authWebhookRateLimiter` (`60` req / 15m).
 
-### 4.2 Staff Login
-* **Endpoint:** `POST /api/v1/admin/auth/login` or `POST /api/v1/officer/auth/login`
-* **Request Body:**
-```json
-{
-  "email": "officer.sharma@bbmp.gov.in",
-  "password": "SecurePassword123!"
-}
-```
-* **Response (`200 OK`):** Sets `civictrack_admin_token` / `civictrack_officer_token` (15m) and refresh token (7d) as `HttpOnly`, `Secure` cookies.
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/maps/status` | Public | Returns provider capability string (`"Ola Maps Web SDK v2 / Directions API"`) and configuration state |
+| `GET` | `/api/v1/maps/reverse-geocode?lng=...&lat=...` | Public | Reverse geocodes coordinates to address metadata |
+| `GET` | `/api/v1/maps/geocode?query=...` | Public | Searches places/addresses |
+| `POST` | `/api/v1/maps/directions` | Public | Body: `{ origin: [lng, lat], destination: [lng, lat], mode? }`. Returns GeoJSON route geometry & turn steps (geometric fallback in dev; `503` in production if unconfigured/unavailable). |
 
-### 4.3 Refresh Access Token
-* **Endpoint:** `POST /api/v1/admin/auth/refresh` or `POST /api/v1/officer/auth/refresh`
-* **Auth:** HttpOnly refresh token cookie
-* **Response (`200 OK`):** Issues new access token and rotates refresh token.
+### 8.2 Duplicate Detection (`/api/v1/duplicates`)
 
-### 4.4 Staff Logout
-* **Endpoint:** `POST /api/v1/admin/auth/logout` or `POST /api/v1/officer/auth/logout`
-* **Response (`200 OK`):** Marks `StaffSession` revoked in database and clears authentication cookies.
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/duplicates/:id/candidates` | `ADMIN`, `OFFICER` | Geospatial `$near` scan within `250m` (max `20` checked, excluding `REJECTED`/`CLOSED`, scoped to officer department if `OFFICER`). Scores `0`–`100` (`SAME_CATEGORY` +30; distance `<=50m` +35 / `<=100m` +25 / `<=250m` +15; description Jaccard >=0.2 up to +35; address Jaccard >=0.3 +10) and returns candidates with `similarityScore >= 40`. |
+| `POST` | `/api/v1/duplicates/:id/link` | `ADMIN` | Non-destructively links a complaint to a primary complaint (`duplicateOf`, `isDuplicate: true`) without cancelling or deleting either record. |
 
-### 4.5 Staff Invitation Management (Admin)
-* `POST /api/v1/admin/invitations`: Generate officer invite with department mapping and cryptographic token. Verifies target department was created by requesting admin.
-* `GET /api/v1/officer/auth/invitation/verify?token=...`: Verify invitation token before displaying signup form.
-* `POST /api/v1/officer/auth/register`: Accept invite, create officer user, and set initial credentials.
+### 8.3 SLA (`/api/v1/sla`)
 
----
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/sla/scan` | `ADMIN` | Manually triggers `SlaService.scanAndEscalateOverdue()` (the server also runs this every `15` minutes) |
+| `GET` | `/api/v1/sla/overdue` | `ADMIN`, `OFFICER` | Lists currently overdue open complaints scoped by role/creator |
 
-## 5. Municipal Departments (`/departments`) — Creator-Scoped
+### 8.4 Analytics (`/api/v1/analytics`)
 
-CivicTrack enforces strict **Creator-Based Admin Isolation**:
-* `GET /api/v1/departments`:
-  - When invoked by an authenticated `ADMIN`: strictly returns active departments created by that administrator (`createdByAdminId === admin.id`).
-  - When invoked by a `CITIZEN` or unauthenticated client: returns all public active municipal departments.
-* `POST /api/v1/departments` (`ADMIN`): Register a new department (`name`, `code`, `categories`). Automatically records `createdByAdminId`.
-* `GET /api/v1/departments/:id`: Fetch department details. Scoped to the creator admin or assigned officer (`403 Forbidden` for cross-admin access).
-* `PATCH /api/v1/departments/:id` (`ADMIN`): Update department name, code, or active status. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
-* `DELETE /api/v1/departments/:id` (`ADMIN`): Deactivate department. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
-* `GET /api/v1/departments/:id/officers` (`ADMIN`, `OFFICER`): Fetch list of active officers assigned to a department. Requires creator admin ownership (`403 Forbidden` for cross-admin access).
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/analytics/summary` | `ADMIN`, `OFFICER` | Aggregated complaint counts, status/category breakdowns, SLA compliance, and resolution metrics. Query: optional `startDate`, `endDate`, `departmentId`. Creator/department-scoped. |
+
+### 8.5 Notifications (`/api/v1/notifications`)
+
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/notifications` | Authenticated | Lists notifications for the current authenticated user |
+| `PATCH` | `/api/v1/notifications/:id/read` | Authenticated | Marks a specific notification as read |
+| `POST` | `/api/v1/notifications/read-all` | Authenticated | Marks all unread notifications for the user as read |
 
 ---
 
-## 6. Staff Governance & Directory (`/users`)
+## 9. Socket.IO Realtime Events (`apps/server/src/socket.ts`)
 
-* `GET /api/v1/users` (`ADMIN`, `OFFICER`): Staff directory with pagination, name/email search, role filtering, and department code filtering (`departmentCode=...`).
-  - For administrators: strictly constrained to officers belonging to departments created by the requesting admin.
-* `DELETE /api/v1/users/officers/:id` (`ADMIN`): Safely delete a field officer.
-  - Ownership validated: officer must belong to a department created by requesting admin.
-  - Referential integrity: unassigns active complaints, revokes sessions, disconnects sockets, revokes pending invites, while preserving historical complaint audit logs.
-* `DELETE /api/v1/users/:id` (`ADMIN`): REST alias for safe field officer deletion.
-* `PATCH /api/v1/users/:id/role` (`ADMIN`): Update user role and assign department. Enforces creator ownership check on the assigned department.
+### Room Topology
 
----
+| Room Name | Purpose |
+| :--- | :--- |
+| `user:{userId}` | Direct user notifications and personal updates |
+| `role:citizen` | Broadcast room for citizen users |
+| `role:officer` | Broadcast room for officer users |
+| `role:admin` | Broadcast room for admin users |
+| `admin:notifications` | Administrative alert & SLA breach notifications |
+| `dept:{departmentId}` | Department-scoped updates for assigned officers |
+| `complaint:{complaintId}` | Complaint detail live listeners |
 
-## 7. Geospatial & Navigation (`/maps`, `/complaints/nearby`)
+### Emitted Events (`packages/contracts/src/realtime.ts`)
 
-* `GET /api/v1/complaints/nearby?longitude=...&latitude=...&maxDistanceMeters=...`: Geospatial proximity search powered by MongoDB `2dsphere` index with auto-index synchronization and graceful fallback.
-* `GET /api/v1/maps/status`: Health and configuration check for Ola Maps SDK integration.
-* `GET /api/v1/maps/geocode?query=Indiranagar`: Search coordinates for an address query.
-* `GET /api/v1/maps/reverse-geocode?lat=12.9716&lng=77.5946`: Convert coordinates to formatted civic street address.
-* `GET /api/v1/maps/directions?originLat=12.97&originLng=77.59&destLat=12.98&destLng=77.61`: Return turn-by-turn route geometry and maneuver steps via Ola Directions API.
+| Event Name | Purpose |
+| :--- | :--- |
+| `notification:new` | Pushes a persisted notification record to the recipient's user room |
+| `complaint:created` | Signals new complaint submission |
+| `complaint:status-updated` | Broadcasts workflow status changes to citizen, admin, department, and complaint rooms |
+| `complaint:assigned` | Notifies department/officer rooms of complaint assignment |
+| `dashboard:stats-updated` | Defined in contracts/`socket.ts` (`emitDashboardStatsUpdated`) and subscribed by `use-realtime-complaints.ts`; not currently emitted by HTTP route handlers |
 
----
-
-## 8. Duplicate Detection (`/duplicates`)
-
-* **Endpoint:** `POST /api/v1/duplicates/check`
-* **Auth:** Authenticated User
-* **Request Body:**
-```json
-{
-  "location": { "type": "Point", "coordinates": [77.5946, 12.9716] },
-  "category": "ROADS_AND_BRIDGES",
-  "radiusMeters": 50
-}
-```
-* **Response (`200 OK`):** Returns existing open complaints within the 50m radius that match the category.
-
----
-
-## 8. SLA Monitoring & Escalations (`/sla`)
-
-* `GET /api/v1/sla/config`: Return configured SLA duration thresholds per priority level.
-* `GET /api/v1/sla/escalations` (`ADMIN`): List all active SLA breach records.
-* `POST /api/v1/sla/scan` (`ADMIN`): Trigger immediate scan of all open complaints for SLA overdue breaches.
-
----
-
-## 9. Real-Time Analytics (`/analytics`)
-
-* `GET /api/v1/analytics/summary` (`ADMIN`): Aggregates total complaints, resolution percentage, active SLA compliance, 14-day trends, category distribution, and department rankings.
-* `GET /api/v1/analytics/sla-standing` (`ADMIN`): Department-specific breakdown of overdue vs compliant issues.
-
----
-
-## 10. Real-Time Notifications (`/notifications`)
-
-* `GET /api/v1/notifications`: List personal notifications for the authenticated user.
-* `PATCH /api/v1/notifications/:id/read`: Mark an individual notification as read.
-* `PATCH /api/v1/notifications/read-all`: Mark all unread notifications as read.
-
----
-
-## 11. System Health & Documentation
-
-* `GET /api/v1/health`: Liveness probe (HTTP 200).
-* `GET /api/v1/ready`: Readiness probe verifying MongoDB database connection.
-* `GET /api/v1/docs`: Interactive Swagger UI OpenAPI 3.0 documentation.
-* `GET /api/v1/docs/openapi.json`: Raw OpenAPI 3.0 specification.
+On the client (`apps/web/src/hooks/use-socket.ts`), incoming events pass through a **10-second (`10000ms`) sliding-window deduplicator**, and `onReconnect` callbacks trigger data re-fetches after socket reconnection.
