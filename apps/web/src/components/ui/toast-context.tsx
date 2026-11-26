@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useId } from "react";
-import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from "lucide-react";
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
@@ -27,9 +27,23 @@ const ToastContext = createContext<ToastContextType | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const removeToast = useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
 
   const showToast = useCallback(
@@ -37,10 +51,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       setToasts((prev) => [...prev, { id, type, title, message }]);
 
-      // Auto-dismiss after 4.5 seconds
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         removeToast(id);
       }, 4500);
+      timersRef.current.set(id, timer);
     },
     [removeToast]
   );
@@ -59,45 +73,45 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-3 sm:px-0"
+        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
       >
         {toasts.map((t) => {
           const isSuccess = t.type === "success";
           const isError = t.type === "error";
           const isWarning = t.type === "warning";
 
+          const borderTone = isSuccess
+            ? "border-emerald-200/90"
+            : isError
+            ? "border-rose-200/90"
+            : isWarning
+            ? "border-amber-200/90"
+            : "border-blue-200/90";
+
           return (
             <div
               key={t.id}
               role="alert"
-              className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all animate-in fade-in slide-in-from-bottom-2 duration-200 ${
-                isSuccess
-                  ? "bg-white/95 dark:bg-slate-900/95 border-emerald-200 dark:border-emerald-800 text-slate-900 dark:text-slate-100 shadow-emerald-500/10"
-                  : isError
-                  ? "bg-white/95 dark:bg-slate-900/95 border-rose-200 dark:border-rose-800 text-slate-900 dark:text-slate-100 shadow-rose-500/10"
-                  : isWarning
-                  ? "bg-white/95 dark:bg-slate-900/95 border-amber-200 dark:border-amber-800 text-slate-900 dark:text-slate-100 shadow-amber-500/10"
-                  : "bg-white/95 dark:bg-slate-900/95 border-blue-200 dark:border-blue-800 text-slate-900 dark:text-slate-100 shadow-blue-500/10"
-              }`}
+              className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl border bg-white/95 backdrop-blur-md text-slate-900 shadow-elevated transition-[opacity,transform] duration-200 animate-in fade-in slide-in-from-bottom-2 ${borderTone}`}
             >
               <div className="shrink-0 mt-0.5">
-                {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
-                {isError && <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />}
-                {isWarning && <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
+                {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+                {isError && <AlertCircle className="w-5 h-5 text-rose-600" />}
+                {isWarning && <AlertTriangle className="w-5 h-5 text-amber-600" />}
                 {!isSuccess && !isError && !isWarning && (
-                  <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <Info className="w-5 h-5 text-blue-600" />
                 )}
               </div>
-              <div className="flex-1 text-xs">
-                <p className="font-bold tracking-tight text-slate-900 dark:text-slate-100">{t.title}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold tracking-tight text-slate-900">{t.title}</p>
                 {t.message && (
-                  <p className="text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{t.message}</p>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{t.message}</p>
                 )}
               </div>
               <button
                 type="button"
                 onClick={() => removeToast(t.id)}
-                className="shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                className="shrink-0 -mr-2 -my-2 inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Close notification"
               >
                 <X className="w-4 h-4" />

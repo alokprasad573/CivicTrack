@@ -35,47 +35,47 @@ export const CATEGORY_COLORS: Record<ComplaintCategory, string> = {
 };
 
 /**
- * Status badge styling
+ * Status badge styling (high-contrast light-mode palette)
  */
 export const STATUS_COLORS: Record<ComplaintStatus, { bg: string; text: string; border: string }> = {
   [ComplaintStatus.SUBMITTED]: {
-    bg: "bg-amber-500/10",
-    text: "text-amber-400",
-    border: "border-amber-500/30",
+    bg: "bg-slate-100",
+    text: "text-slate-700",
+    border: "border-slate-200",
   },
   [ComplaintStatus.UNDER_REVIEW]: {
-    bg: "bg-cyan-500/10",
-    text: "text-cyan-400",
-    border: "border-cyan-500/30",
+    bg: "bg-amber-50",
+    text: "text-amber-800",
+    border: "border-amber-200",
   },
   [ComplaintStatus.VERIFIED]: {
-    bg: "bg-indigo-500/10",
-    text: "text-indigo-400",
-    border: "border-indigo-500/30",
+    bg: "bg-sky-50",
+    text: "text-sky-800",
+    border: "border-sky-200",
   },
   [ComplaintStatus.ASSIGNED]: {
-    bg: "bg-blue-500/10",
-    text: "text-blue-400",
-    border: "border-blue-500/30",
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    border: "border-blue-200",
   },
   [ComplaintStatus.IN_PROGRESS]: {
-    bg: "bg-teal-500/10",
-    text: "text-teal-300",
-    border: "border-teal-500/30",
+    bg: "bg-teal-50",
+    text: "text-teal-800",
+    border: "border-teal-200",
   },
   [ComplaintStatus.RESOLVED]: {
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-400",
-    border: "border-emerald-500/30",
+    bg: "bg-emerald-50",
+    text: "text-emerald-800",
+    border: "border-emerald-200",
   },
   [ComplaintStatus.CLOSED]: {
-    bg: "bg-zinc-500/10",
-    text: "text-zinc-400",
-    border: "border-zinc-500/30",
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    border: "border-slate-200",
   },
   [ComplaintStatus.REJECTED]: {
-    bg: "bg-red-500/10",
-    text: "text-red-400",
-    border: "border-red-500/30",
+    bg: "bg-rose-50",
+    text: "text-rose-700",
+    border: "border-rose-200",
   },
 };

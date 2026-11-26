@@ -29,12 +29,18 @@ export function PageHeader({
 }: PageHeaderProps) {
   const ActionIcon = action?.icon;
 
+  const actionClasses = `inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium shadow-hairline transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+    action?.variant === "secondary"
+      ? "bg-card text-foreground border border-slate-200 hover:bg-slate-50"
+      : "bg-primary text-primary-foreground border border-blue-600 hover:bg-blue-700"
+  }`;
+
   return (
-    <div className="space-y-3 pb-2">
+    <div className="space-y-2 pb-2">
       {backHref && (
         <Link
           href={backHref}
-          className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors min-h-[44px] py-2"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors min-h-[44px] py-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{backLabel}</span>
@@ -42,19 +48,19 @@ export function PageHeader({
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
               {title}
             </h1>
             {badge && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
                 {badge}
               </span>
             )}
           </div>
           {subtitle && (
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed max-w-2xl">
+            <p className="text-sm text-slate-600 mt-1.5 leading-relaxed max-w-2xl">
               {subtitle}
             </p>
           )}
@@ -63,14 +69,7 @@ export function PageHeader({
         {action && (
           <div className="shrink-0 self-start sm:self-auto">
             {action.href ? (
-              <Link
-                href={action.href}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition active:scale-[0.98] min-h-[44px] min-w-[44px] ${
-                  action.variant === "secondary"
-                    ? "bg-card text-foreground border border-border hover:bg-secondary"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
-                }`}
-              >
+              <Link href={action.href} className={actionClasses}>
                 {ActionIcon && <ActionIcon className="w-4 h-4" />}
                 <span>{action.label}</span>
               </Link>
@@ -78,11 +77,7 @@ export function PageHeader({
               <button
                 type="button"
                 onClick={action.onClick}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition active:scale-[0.98] min-h-[44px] min-w-[44px] ${
-                  action.variant === "secondary"
-                    ? "bg-card text-foreground border border-border hover:bg-secondary"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
-                }`}
+                className={actionClasses}
               >
                 {ActionIcon && <ActionIcon className="w-4 h-4" />}
                 <span>{action.label}</span>
