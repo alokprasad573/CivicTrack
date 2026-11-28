@@ -99,7 +99,7 @@ export default async function HomePage() {
                 <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
                   Report local issues.
                   <br />
-                  <span className="text-blue-600">Track when they get fixed.</span>
+                  <span className="text-white">Track when they get fixed.</span>
                 </h1>
 
                 <p className="max-w-xl text-base leading-relaxed text-slate-900 sm:text-lg">
